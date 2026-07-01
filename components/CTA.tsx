@@ -62,7 +62,7 @@ export default function CTA() {
           transition: `opacity .65s ${visible ? '.28s' : '0s'} ease, transform .65s ${visible ? '.28s' : '0s'} ease`,
         }}>
           <a
-            href="https://wa.me/919876543210"
+            href={`https://wa.me/${process.env.NEXT_PUBLIC_WHATSAPP_PHONE}`}
             style={{ padding: '14px 32px', background: 'var(--accent)', color: '#000', borderRadius: 4, fontSize: 13, fontWeight: 600, letterSpacing: '0.03em', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 8, transition: 'all .3s', whiteSpace: 'nowrap' }}
             onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.boxShadow = '0 0 28px rgba(0,255,140,.4)'; el.style.transform = 'translateY(-2px)' }}
             onMouseLeave={e => { const el = e.currentTarget as HTMLElement; el.style.boxShadow = 'none'; el.style.transform = 'translateY(0)' }}
@@ -70,7 +70,7 @@ export default function CTA() {
             💬 Chat on WhatsApp
           </a>
           <a
-            href="mailto:it@harkonsupport.com"
+            href={`mailto:${process.env.NEXT_PUBLIC_CONTACT_EMAIL}`}
             style={{ padding: '14px 32px', border: '1px solid var(--border-hi)', color: 'var(--text)', borderRadius: 4, fontSize: 13, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 8, transition: 'all .3s', whiteSpace: 'nowrap' }}
             onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.borderColor = 'var(--accent)'; el.style.color = 'var(--accent)'; el.style.background = 'rgba(0,255,140,.04)' }}
             onMouseLeave={e => { const el = e.currentTarget as HTMLElement; el.style.borderColor = 'var(--border-hi)'; el.style.color = 'var(--text)'; el.style.background = 'none' }}
