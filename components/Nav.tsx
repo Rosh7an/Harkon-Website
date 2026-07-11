@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Image from 'next/image'
+import ThemeToggle from '@/components/ThemeToggle'
 
 const NAV_LINKS = [
   { label: 'Home',     id: 'hero'     },
@@ -43,7 +45,7 @@ export default function Nav() {
           alignItems:       'center',
           justifyContent:   'space-between',
           transition:       'all 0.4s ease',
-          background:       scrolled ? 'rgba(3,7,10,0.92)' : 'transparent',
+          background:       scrolled ? 'rgba(var(--bg-rgb),0.92)' : 'transparent',
           borderBottom:     scrolled ? '1px solid var(--border)' : 'none',
           backdropFilter:   scrolled ? 'blur(20px)' : 'none',
           WebkitBackdropFilter: scrolled ? 'blur(20px)' : 'none',
@@ -52,12 +54,11 @@ export default function Nav() {
         {/* Logo */}
         <button
           onClick={() => scrollTo('hero')}
-          style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+          aria-label="Exter Cloud — Home"
+          style={{ display: 'flex', alignItems: 'center', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
         >
-          <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--accent)', boxShadow: '0 0 10px var(--accent)', animation: 'pulse 2s ease infinite', flexShrink: 0 }} />
-          <span style={{ fontFamily: 'var(--font)', fontSize: 20, letterSpacing: '0.08em', color: 'var(--text)', textDecoration: 'none' }}>
-            HARKON
-          </span>
+          <Image src="/logo-lockup-ondark.png" alt="" width={1330} height={882} priority className="show-on-dark" style={{ height: 44, width: 'auto' }} />
+          <Image src="/logo-lockup-onlight.png" alt="" width={1330} height={882} priority className="show-on-light" style={{ height: 44, width: 'auto' }} />
         </button>
 
         {/* Desktop links */}
@@ -79,7 +80,7 @@ export default function Nav() {
             <button
               onClick={() => scrollTo('cta')}
               style={{ padding: '8px 20px', border: '1px solid var(--border-hi)', borderRadius: 4, color: 'var(--accent)', fontSize: 12, background: 'none', cursor: 'pointer', fontFamily: 'var(--font)', letterSpacing: '0.05em', transition: 'background 0.2s' }}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(0,255,140,0.07)' }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(216,90,48,0.07)' }}
               onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'none' }}
             >
               Get started
@@ -87,23 +88,27 @@ export default function Nav() {
           </li>
         </ul>
 
-        {/* Hamburger */}
-        <button
-          onClick={() => setMobileOpen(true)}
-          aria-label="Menu"
-          className="flex md:hidden flex-col gap-1.5"
-          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '12px 8px', margin: '-12px -8px' }}
-        >
-          {[0,1,2].map(i => (
-            <span key={i} style={{ display: 'block', width: 22, height: 1.5, background: 'var(--text)', borderRadius: 1 }} />
-          ))}
-        </button>
+        {/* Right cluster: theme toggle (always visible) + hamburger (mobile only) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <ThemeToggle />
+
+          <button
+            onClick={() => setMobileOpen(true)}
+            aria-label="Menu"
+            className="flex md:hidden flex-col gap-1.5"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '12px 8px', margin: '-12px -8px' }}
+          >
+            {[0,1,2].map(i => (
+              <span key={i} style={{ display: 'block', width: 22, height: 1.5, background: 'var(--text)', borderRadius: 1 }} />
+            ))}
+          </button>
+        </div>
       </nav>
 
       {/* Mobile overlay */}
       {mobileOpen && (
         <div
-          style={{ position: 'fixed', inset: 0, background: 'rgba(3,7,10,0.97)', zIndex: 490, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 32, backdropFilter: 'blur(20px)' }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(var(--bg-rgb),0.97)', zIndex: 490, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 32, backdropFilter: 'blur(20px)' }}
         >
           <button
             onClick={() => setMobileOpen(false)}

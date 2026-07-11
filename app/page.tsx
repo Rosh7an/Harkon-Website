@@ -8,7 +8,6 @@ import Process  from '@/components/Process'
 import Stats    from '@/components/Stats'
 import CTA      from '@/components/CTA'
 import Footer   from '@/components/Footer'
-// Testimonials kept in components/Testimonials.tsx — not rendered currently
 
 export default function Home() {
   return (

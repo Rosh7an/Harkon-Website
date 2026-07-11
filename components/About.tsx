@@ -7,21 +7,21 @@ const SEGMENTS = [
     icon: '🎯',
     label: 'Mission',
     accent: 'var(--accent)',
-    bar: '#00ff8c',
+    bar: 'var(--accent)',
     desc: 'To provide enhanced digital solutions for business growth, accessible to startups and enterprises of every scale.',
   },
   {
     icon: '🔭',
     label: 'Vision',
-    accent: 'var(--accent2)',
-    bar: '#00c8ff',
+    accent: 'var(--accent)',
+    bar: 'var(--accent)',
     desc: 'To bring reliable, future-ready solutions to every business by leveraging modern technologies and best practices.',
   },
   {
     icon: '💎',
     label: 'Value',
-    accent: 'var(--accent3)',
-    bar: '#7b61ff',
+    accent: 'var(--accent)',
+    bar: 'var(--accent)',
     desc: 'To deliver products that drive real business growth, built with utmost sincerity and full transparency.',
   },
 ]
@@ -48,7 +48,7 @@ export default function About() {
       style={{ background: 'var(--surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}
     >
       {/* Ambient */}
-      <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse at 50% 0%, rgba(0,255,140,.04) 0%, transparent 60%), radial-gradient(ellipse at 50% 100%, rgba(0,200,255,.03) 0%, transparent 55%)', pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse at 50% 0%, rgba(216,90,48,.035) 0%, transparent 60%), radial-gradient(ellipse at 50% 100%, rgba(12,42,67,.03) 0%, transparent 55%)', pointerEvents: 'none' }} />
 
       <div style={{ maxWidth: 1100, width: '100%', padding: 'clamp(56px,8vh,100px) 24px', position: 'relative', zIndex: 2 }}>
 
@@ -89,10 +89,10 @@ export default function About() {
               <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, ${s.bar}, transparent)`, opacity: .65 }} />
 
               {/* Hover glow */}
-              <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(ellipse at 30% 0%, ${s.bar}14 0%, transparent 60%)`, pointerEvents: 'none' }} />
+              <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(ellipse at 30% 0%, ${s.bar} 0%, transparent 60%)`, opacity: .12, pointerEvents: 'none' }} />
 
               {/* Icon */}
-              <div style={{ fontSize: 38, marginBottom: 24, display: 'inline-block', filter: `drop-shadow(0 0 12px ${s.bar}80)` }} className="float-anim">
+              <div style={{ fontSize: 38, marginBottom: 24, display: 'inline-block', filter: `drop-shadow(0 0 10px ${s.bar})`, opacity: .8 }}>
                 {s.icon}
               </div>
 

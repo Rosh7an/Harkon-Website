@@ -40,7 +40,7 @@ export default function SideNav() {
             width:        4,
             height:       active === i ? 20 : 4,
             borderRadius: 2,
-            background:   active === i ? 'var(--accent)' : 'rgba(255,255,255,0.18)',
+            background:   active === i ? 'var(--accent)' : 'var(--border-hi)',
             boxShadow:    active === i ? '0 0 8px var(--accent)' : 'none',
             border:       'none',
             padding:      0,

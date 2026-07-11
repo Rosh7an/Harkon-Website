@@ -32,8 +32,8 @@ export default function Hero() {
       r() {
         this.x = Math.random() * W; this.y = Math.random() * H
         this.vx = (Math.random() - .5) * .3; this.vy = (Math.random() - .5) * .3
-        this.s = Math.random() * 1.4 + .3; this.a = Math.random() * .45 + .08
-        this.c = Math.random() > .6 ? '0,255,140' : '0,200,255'
+        this.s = Math.random() * 1.4 + .3; this.a = Math.random() * .35 + .06
+        this.c = Math.random() > .6 ? '216,90,48' : '240,153,123'
       }
       u() { this.x += this.vx; this.y += this.vy; if (this.x < 0 || this.x > W || this.y < 0 || this.y > H) this.r() }
       d() { ctx!.beginPath(); ctx!.arc(this.x, this.y, this.s, 0, Math.PI * 2); ctx!.fillStyle = `rgba(${this.c},${this.a})`; ctx!.fill() }
@@ -52,7 +52,7 @@ export default function Hero() {
           const d = Math.sqrt(dx * dx + dy * dy)
           if (d < 85) {
             ctx.beginPath(); ctx.moveTo(pts[i].x, pts[i].y); ctx.lineTo(pts[j].x, pts[j].y)
-            ctx.strokeStyle = `rgba(0,255,140,${(1 - d / 85) * .07})`; ctx.lineWidth = .4; ctx.stroke()
+            ctx.strokeStyle = `rgba(216,90,48,${(1 - d / 85) * .05})`; ctx.lineWidth = .4; ctx.stroke()
           }
         }
       }
@@ -97,11 +97,8 @@ export default function Hero() {
           src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260314_131748_f2ca2a28-fed7-44c8-b9a9-bd9acdd5ec31.mp4"
           autoPlay loop muted playsInline
         />
-        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(3,7,10,.6) 0%, rgba(3,7,10,.25) 40%, rgba(3,7,10,.82) 85%, #03070a 100%)' }} />
+        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(var(--bg-rgb),.55) 0%, rgba(var(--bg-rgb),.35) 40%, rgba(var(--bg-rgb),.88) 85%, var(--bg) 100%)' }} />
       </div>
-
-      {/* Scan */}
-      <div className="hero-scan" style={{ position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none', overflow: 'hidden' }} />
 
       {/* Canvas */}
       <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none' }} />
@@ -115,15 +112,13 @@ export default function Hero() {
         style={{ textAlign: 'center', maxWidth: 960, width: '100%', animation: 'fadeUp .9s ease both' }}
       >
         {/* Badge */}
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, border: '1px solid rgba(0,255,140,.25)', background: 'rgba(0,255,140,.05)', color: 'var(--accent)', fontSize: 10, fontWeight: 500, letterSpacing: '0.14em', textTransform: 'uppercase', padding: '7px 16px', borderRadius: 3, marginBottom: 28 }}>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, border: '1px solid rgba(216,90,48,.25)', background: 'rgba(216,90,48,.06)', color: 'var(--accent)', fontSize: 10, fontWeight: 500, letterSpacing: '0.14em', textTransform: 'uppercase', padding: '7px 16px', borderRadius: 3, marginBottom: 28 }}>
           <div style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--accent)', boxShadow: '0 0 10px var(--accent)', animation: 'pulse 2s infinite', flexShrink: 0 }} />
           Digital solutions for growing businesses
         </div>
 
         {/* Heading */}
         <h1
-          className="hero-h1"
-          data-text="We build the digital edge you deserve"
           style={{ fontSize: 'clamp(44px,9vw,108px)', fontWeight: 400, lineHeight: .92, letterSpacing: '-0.05em', marginBottom: 24, color: 'var(--text)' }}
         >
           We build the<br />
@@ -134,15 +129,15 @@ export default function Hero() {
 
         {/* Sub */}
         <p style={{ fontSize: 'clamp(14px,2vw,17px)', color: 'var(--muted)', maxWidth: 460, margin: '0 auto 40px', lineHeight: 1.8, animation: 'fadeUp .8s .25s ease both' }}>
-          HARKON crafts custom websites, booking systems, management platforms, mobile apps and WhatsApp integrations — built to scale your business from day one.
+          Exter Cloud crafts custom websites, booking systems, management platforms, mobile apps and WhatsApp integrations — built to scale your business from day one.
         </p>
 
         {/* Actions */}
         <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', animation: 'fadeUp .8s .4s ease both' }}>
           <button
             onClick={() => scrollTo('services')}
-            style={{ padding: '14px 32px', background: 'var(--accent)', color: '#000', borderRadius: 4, fontSize: 13, fontWeight: 600, letterSpacing: '0.03em', border: 'none', cursor: 'pointer', fontFamily: 'var(--font)', display: 'inline-flex', alignItems: 'center', gap: 8, transition: 'all .3s', whiteSpace: 'nowrap' }}
-            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.boxShadow = '0 0 28px rgba(0,255,140,.4)'; (e.currentTarget as HTMLElement).style.transform = 'translateY(-2px)' }}
+            style={{ padding: '14px 32px', background: 'var(--accent)', color: '#fff', borderRadius: 4, fontSize: 13, fontWeight: 600, letterSpacing: '0.03em', border: 'none', cursor: 'pointer', fontFamily: 'var(--font)', display: 'inline-flex', alignItems: 'center', gap: 8, transition: 'all .3s', whiteSpace: 'nowrap' }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.boxShadow = '0 10px 28px rgba(216,90,48,.28)'; (e.currentTarget as HTMLElement).style.transform = 'translateY(-2px)' }}
             onMouseLeave={e => { (e.currentTarget as HTMLElement).style.boxShadow = 'none'; (e.currentTarget as HTMLElement).style.transform = 'translateY(0)' }}
           >
             Explore services →
@@ -150,7 +145,7 @@ export default function Hero() {
           <button
             onClick={() => scrollTo('process')}
             style={{ padding: '14px 32px', border: '1px solid var(--border-hi)', color: 'var(--text)', borderRadius: 4, fontSize: 13, background: 'none', cursor: 'pointer', fontFamily: 'var(--font)', display: 'inline-flex', alignItems: 'center', gap: 8, transition: 'all .3s', whiteSpace: 'nowrap' }}
-            onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.borderColor = 'var(--accent)'; el.style.color = 'var(--accent)'; el.style.background = 'rgba(0,255,140,.04)' }}
+            onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.borderColor = 'var(--accent)'; el.style.color = 'var(--accent)'; el.style.background = 'rgba(216,90,48,.05)' }}
             onMouseLeave={e => { const el = e.currentTarget as HTMLElement; el.style.borderColor = 'var(--border-hi)'; el.style.color = 'var(--text)'; el.style.background = 'none' }}
           >
             How we work
@@ -163,7 +158,7 @@ export default function Hero() {
       <div
         style={{ position: 'relative', zIndex: 3, borderTop: '1px solid var(--border)', display: 'flex', flexWrap: 'wrap', animation: 'fadeIn 1s .7s ease both', opacity: 0, animationFillMode: 'both' }}
       >
-        {HERO_STATS.map((s, i) => (
+        {HERO_STATS.map(s => (
           <div key={s.label} className="hero-stat-item" style={{ padding: 'clamp(10px,2vh,16px) clamp(12px,3vw,24px)', display: 'flex', flexDirection: 'column', gap: 3 }}>
             <div style={{ fontFamily: 'var(--font)', fontSize: 22, color: 'var(--accent)', letterSpacing: '-0.04em' }}>{s.num}</div>
             <div style={{ fontSize: 10, color: 'var(--muted2)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>{s.label}</div>

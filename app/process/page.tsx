@@ -2,7 +2,7 @@ import Nav     from '@/components/Nav'
 import Process from '@/components/Process'
 import Footer  from '@/components/Footer'
 
-export const metadata = { title: 'Process — HARKON' }
+export const metadata = { title: 'Process — Exter Cloud' }
 
 export default function ProcessPage() {
   return (

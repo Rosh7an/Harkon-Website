@@ -160,9 +160,9 @@ export default function Process() {
             aria-label="Previous step"
             onClick={() => goProc(procIdx - 1)}
             disabled={procIdx === 0}
-            style={{ position: 'absolute', left: 20, top: '50%', transform: 'translateY(-50%)', zIndex: 10, width: 40, height: 40, border: '1px solid rgba(0,255,140,.2)', borderRadius: 8, background: 'rgba(3,7,10,.72)', backdropFilter: 'blur(12px)', color: 'rgba(232,245,240,.75)', fontSize: 15, cursor: procIdx === 0 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font)', transition: 'all .25s', opacity: procIdx === 0 ? 0.25 : 1, pointerEvents: procIdx === 0 ? 'none' : 'auto' }}
-            onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.borderColor = 'var(--accent)'; el.style.color = 'var(--accent)'; el.style.background = 'rgba(0,255,140,.08)' }}
-            onMouseLeave={e => { const el = e.currentTarget as HTMLElement; el.style.borderColor = 'rgba(0,255,140,.2)'; el.style.color = 'rgba(232,245,240,.75)'; el.style.background = 'rgba(3,7,10,.72)' }}
+            style={{ position: 'absolute', left: 20, top: '50%', transform: 'translateY(-50%)', zIndex: 10, width: 40, height: 40, border: '1px solid var(--border-hi)', borderRadius: 8, background: 'rgba(var(--bg-rgb),.75)', backdropFilter: 'blur(12px)', color: 'rgba(var(--text-rgb),.75)', fontSize: 15, cursor: procIdx === 0 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font)', transition: 'all .25s', opacity: procIdx === 0 ? 0.25 : 1, pointerEvents: procIdx === 0 ? 'none' : 'auto' }}
+            onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.borderColor = 'var(--accent)'; el.style.color = 'var(--accent)'; el.style.background = 'rgba(216,90,48,.08)' }}
+            onMouseLeave={e => { const el = e.currentTarget as HTMLElement; el.style.borderColor = 'var(--border-hi)'; el.style.color = 'rgba(var(--text-rgb),.75)'; el.style.background = 'rgba(var(--bg-rgb),.75)' }}
           >←</button>
 
           {/* Stage */}
@@ -176,7 +176,7 @@ export default function Process() {
                   onClick={() => { if (i !== procIdx) goProc(i) }}
                 >
                   <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--accent2)', marginBottom: 10 }}>{s.step}</p>
-                  <div style={{ fontSize: 30, marginBottom: 14, filter: 'drop-shadow(0 0 10px rgba(0,200,255,.3))' }}>{s.icon}</div>
+                  <div style={{ fontSize: 30, marginBottom: 14, filter: 'drop-shadow(0 0 8px rgba(12,42,67,.22))' }}>{s.icon}</div>
                   <h3 style={{ fontFamily: 'var(--font)', fontSize: 20, fontWeight: 700, letterSpacing: '-0.03em', marginBottom: 8, color: 'var(--text)', lineHeight: 1.1 }}>{s.title}</h3>
                   <p style={{ fontSize: 12.5, color: 'var(--muted)', lineHeight: 1.65, flex: 1 }}>{s.desc}</p>
                   <div style={{ marginTop: 14, fontSize: 10, color: 'var(--muted2)', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -193,9 +193,9 @@ export default function Process() {
             aria-label="Next step"
             onClick={() => goProc(procIdx + 1)}
             disabled={procIdx === STEPS.length - 1}
-            style={{ position: 'absolute', right: 20, top: '50%', transform: 'translateY(-50%)', zIndex: 10, width: 40, height: 40, border: '1px solid rgba(0,255,140,.2)', borderRadius: 8, background: 'rgba(3,7,10,.72)', backdropFilter: 'blur(12px)', color: 'rgba(232,245,240,.75)', fontSize: 15, cursor: procIdx === STEPS.length - 1 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font)', transition: 'all .25s', opacity: procIdx === STEPS.length - 1 ? 0.25 : 1, pointerEvents: procIdx === STEPS.length - 1 ? 'none' : 'auto' }}
-            onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.borderColor = 'var(--accent)'; el.style.color = 'var(--accent)'; el.style.background = 'rgba(0,255,140,.08)' }}
-            onMouseLeave={e => { const el = e.currentTarget as HTMLElement; el.style.borderColor = 'rgba(0,255,140,.2)'; el.style.color = 'rgba(232,245,240,.75)'; el.style.background = 'rgba(3,7,10,.72)' }}
+            style={{ position: 'absolute', right: 20, top: '50%', transform: 'translateY(-50%)', zIndex: 10, width: 40, height: 40, border: '1px solid var(--border-hi)', borderRadius: 8, background: 'rgba(var(--bg-rgb),.75)', backdropFilter: 'blur(12px)', color: 'rgba(var(--text-rgb),.75)', fontSize: 15, cursor: procIdx === STEPS.length - 1 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font)', transition: 'all .25s', opacity: procIdx === STEPS.length - 1 ? 0.25 : 1, pointerEvents: procIdx === STEPS.length - 1 ? 'none' : 'auto' }}
+            onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.borderColor = 'var(--accent)'; el.style.color = 'var(--accent)'; el.style.background = 'rgba(216,90,48,.08)' }}
+            onMouseLeave={e => { const el = e.currentTarget as HTMLElement; el.style.borderColor = 'var(--border-hi)'; el.style.color = 'rgba(var(--text-rgb),.75)'; el.style.background = 'rgba(var(--bg-rgb),.75)' }}
           >→</button>
 
         </div>

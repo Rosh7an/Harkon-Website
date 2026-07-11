@@ -9,7 +9,7 @@ export default function Marquee() {
         {doubled.map((name, i) => (
           <span
             key={i}
-            style={{ fontSize: 10.5, fontWeight: 500, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(232,245,240,0.17)', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 8 }}
+            style={{ fontSize: 10.5, fontWeight: 500, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(var(--text-rgb), 0.8)', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 8 }}
           >
             <span style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--accent)', opacity: .35, flexShrink: 0, display: 'inline-block' }} />
             {name}
