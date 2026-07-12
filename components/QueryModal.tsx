@@ -47,6 +47,8 @@ export default function QueryModal({ open, onClose }: { open: boolean; onClose: 
   const [message, setMessage] = useState('')
   const [touched, setTouched] = useState<Record<string, boolean>>({})
   const [submitted, setSubmitted] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState('')
   const firstFieldRef = useRef<HTMLInputElement>(null)
 
   const country = COUNTRY_CODES.find(c => c.iso === countryIso) ?? COUNTRY_CODES.find(c => c.iso === DEFAULT_ISO)!
@@ -69,7 +71,7 @@ export default function QueryModal({ open, onClose }: { open: boolean; onClose: 
   useEffect(() => {
     if (!open) {
       setName(''); setEmail(''); setCountryIso(DEFAULT_ISO); setPhone(''); setMessage('')
-      setTouched({}); setSubmitted(false)
+      setTouched({}); setSubmitted(false); setSubmitting(false); setSubmitError('')
     }
   }, [open])
 
@@ -77,24 +79,34 @@ export default function QueryModal({ open, onClose }: { open: boolean; onClose: 
 
   const showError = (field: keyof Errors) => touched[field] && errors[field]
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setTouched({ name: true, email: true, phone: true, message: true })
-    if (!isValid) return
+    if (!isValid || submitting) return
 
-    const lines = [
-      `Name: ${name.trim()}`,
-      `Phone: ${country.dial} ${phone.trim()}`,
-      email.trim() && `Email: ${email.trim()}`,
-      '',
-      'Message:',
-      message.trim(),
-    ].filter(Boolean).join('\n')
-
-    const subject = encodeURIComponent('New query from Exter Cloud website')
-    const body = encodeURIComponent(lines)
-    window.location.href = `mailto:${process.env.NEXT_PUBLIC_CONTACT_EMAIL}?subject=${subject}&body=${body}`
-    setSubmitted(true)
+    setSubmitting(true)
+    setSubmitError('')
+    try {
+      const res = await fetch('/api/send-query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: name.trim(),
+          phone: `${country.dial} ${phone.trim()}`,
+          email: email.trim(),
+          message: message.trim(),
+        }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || 'Something went wrong. Please try again.')
+      }
+      setSubmitted(true)
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const inputStyle = (hasError: boolean): React.CSSProperties => ({
@@ -165,12 +177,12 @@ export default function QueryModal({ open, onClose }: { open: boolean; onClose: 
 
         {submitted ? (
           <div style={{ textAlign: 'center', padding: '20px 0' }}>
-            <p style={{ fontSize: 30, marginBottom: 16 }}>💬</p>
+            <p style={{ fontSize: 30, marginBottom: 16 }}>✅</p>
             <h3 style={{ fontFamily: 'var(--font)', fontSize: 22, color: 'var(--text)', marginBottom: 10 }}>
-              Almost there
+              Message sent
             </h3>
             <p style={{ fontSize: 13.5, color: 'var(--muted)', lineHeight: 1.7, marginBottom: 24 }}>
-              Your email app should be opening now with your query pre-filled. Just hit send from there.
+              Thanks for reaching out — we've received your query and will get back to you shortly.
             </p>
             <button
               onClick={onClose}
@@ -252,19 +264,24 @@ export default function QueryModal({ open, onClose }: { open: boolean; onClose: 
                 {showError('message') && <p style={errorStyle}>{errors.message}</p>}
               </div>
 
+              {submitError && (
+                <p style={{ ...errorStyle, marginTop: 0, marginBottom: 12, textAlign: 'center' }}>{submitError}</p>
+              )}
+
               <button
                 type="submit"
-                disabled={!isValid}
+                disabled={!isValid || submitting}
                 style={{
                   width: '100%', padding: '13px 24px', borderRadius: 6, border: 'none',
                   background: isValid ? 'var(--accent)' : 'var(--border-hi)',
                   color: isValid ? '#fff' : 'var(--muted)',
                   fontSize: 13.5, fontWeight: 600, letterSpacing: '0.02em',
-                  cursor: isValid ? 'pointer' : 'not-allowed',
+                  cursor: isValid && !submitting ? 'pointer' : 'not-allowed',
+                  opacity: submitting ? 0.7 : 1,
                   fontFamily: 'var(--font)', transition: 'background .2s, color .2s',
                 }}
               >
-                Send
+                {submitting ? 'Sending…' : 'Send'}
               </button>
             </form>
           </>

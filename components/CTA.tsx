@@ -71,14 +71,14 @@ export default function CTA() {
           >
             💬 Chat on WhatsApp
           </a>
-          {/* <button
+          <button
             onClick={() => setQueryOpen(true)}
             style={{ padding: '14px 32px', border: '1px solid var(--border-hi)', color: 'var(--text)', borderRadius: 4, fontSize: 13, background: 'none', cursor: 'pointer', fontFamily: 'var(--font)', display: 'inline-flex', alignItems: 'center', gap: 8, transition: 'all .3s', whiteSpace: 'nowrap' }}
             onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.borderColor = 'var(--accent)'; el.style.color = 'var(--accent)'; el.style.background = 'rgba(216,90,48,.05)' }}
             onMouseLeave={e => { const el = e.currentTarget as HTMLElement; el.style.borderColor = 'var(--border-hi)'; el.style.color = 'var(--text)'; el.style.background = 'none' }}
           >
             Send a query →
-          </button> */}
+          </button>
         </div>
       </div>
 
