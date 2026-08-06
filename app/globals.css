@@ -40,6 +40,11 @@
 /* ── BASE ── */
 *, *::before, *::after { box-sizing: border-box; }
 html { scroll-behavior: auto; overflow-x: hidden; }
+
+/* ── SCROLL OFFSET: clears the fixed nav so sections land below it, not hidden behind it ── */
+#hero, #about, #services, #process, #stats, #cta {
+  scroll-margin-top: 88px;
+}
 body {
   background: var(--bg);
   color: var(--text);

@@ -8,6 +8,12 @@ export default function SplashScreen() {
   const [fading, setFading] = useState(false)
 
   useEffect(() => {
+    // Prevent browser from restoring a previous scroll position
+    if ('scrollRestoration' in history) {
+      history.scrollRestoration = 'manual'
+    }
+    window.scrollTo(0, 0)
+
     const fadeTimer = setTimeout(() => setFading(true), 900)
     const removeTimer = setTimeout(() => setVisible(false), 1300)
     return () => { clearTimeout(fadeTimer); clearTimeout(removeTimer) }
