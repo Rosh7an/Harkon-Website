@@ -14,13 +14,15 @@ interface Errors {
   message?: string
 }
 
-function validate(fields: { name: string; email: string; phone: string; message: string }, phoneLen: [number, number]): Errors {
+export function validate(fields: { name: string; email: string; phone: string; message: string }, phoneLen: [number, number]): Errors {
   const errors: Errors = {}
 
   if (!fields.name.trim()) errors.name = 'Name is required.'
   else if (fields.name.trim().length < 2) errors.name = 'Name looks too short.'
 
-  if (fields.email.trim() && !EMAIL_RE.test(fields.email.trim())) {
+  if (!fields.email.trim()) {
+    errors.email = 'Email is required.'
+  } else if (!EMAIL_RE.test(fields.email.trim())) {
     errors.email = 'Enter a valid email address.'
   }
 
@@ -39,7 +41,7 @@ function validate(fields: { name: string; email: string; phone: string; message:
   return errors
 }
 
-export default function QueryModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+export default function QueryModal({ open, onClose, initialMessage }: { open: boolean; onClose: () => void; initialMessage?: string }) {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [countryIso, setCountryIso] = useState(DEFAULT_ISO)
@@ -50,6 +52,8 @@ export default function QueryModal({ open, onClose }: { open: boolean; onClose: 
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
   const firstFieldRef = useRef<HTMLInputElement>(null)
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const errorSummaryRef = useRef<HTMLDivElement>(null)
 
   const country = COUNTRY_CODES.find(c => c.iso === countryIso) ?? COUNTRY_CODES.find(c => c.iso === DEFAULT_ISO)!
   const errors = validate({ name, email, phone, message }, country.len)
@@ -57,16 +61,40 @@ export default function QueryModal({ open, onClose }: { open: boolean; onClose: 
 
   useEffect(() => {
     if (!open) return
+    if (initialMessage) {
+      setMessage(initialMessage)
+    }
     document.body.style.overflow = 'hidden'
+    document.documentElement.style.overflow = 'hidden'
+    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null
     const t = setTimeout(() => firstFieldRef.current?.focus(), 50)
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose()
+        return
+      }
+      if (e.key !== 'Tab' || !dialogRef.current) return
+      const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'))
+      if (focusable.length === 0) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
     document.addEventListener('keydown', onKey)
     return () => {
       document.body.style.overflow = ''
+      document.documentElement.style.overflow = ''
       document.removeEventListener('keydown', onKey)
       clearTimeout(t)
+      previouslyFocused?.focus()
     }
-  }, [open, onClose])
+  }, [open, onClose, initialMessage])
 
   useEffect(() => {
     if (!open) {
@@ -82,28 +110,30 @@ export default function QueryModal({ open, onClose }: { open: boolean; onClose: 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setTouched({ name: true, email: true, phone: true, message: true })
-    if (!isValid || submitting) return
+    if (!isValid || submitting) {
+      setTimeout(() => errorSummaryRef.current?.focus(), 0)
+      return
+    }
 
     setSubmitting(true)
     setSubmitError('')
+
     try {
-      const res = await fetch('/api/send-query', {
+      const response = await fetch('/api/send-query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: name.trim(),
-          phone: `${country.dial} ${phone.trim()}`,
           email: email.trim(),
+          phone: `${country.dial} ${phone.trim()}`,
           message: message.trim(),
         }),
       })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data.error || 'Something went wrong. Please try again.')
-      }
+      const data = await response.json() as { success?: boolean; error?: string }
+      if (!response.ok || !data.success) throw new Error(data.error || 'Failed to send inquiry.')
       setSubmitted(true)
-    } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
+    } catch (err: unknown) {
+      setSubmitError(err instanceof Error ? err.message : 'Failed to send inquiry. Please try again.')
     } finally {
       setSubmitting(false)
     }
@@ -113,7 +143,7 @@ export default function QueryModal({ open, onClose }: { open: boolean; onClose: 
     width: '100%',
     padding: '11px 14px',
     borderRadius: 8,
-    border: `1px solid ${hasError ? '#D64545' : 'var(--border-hi)'}`,
+    border: `1px solid ${hasError ? 'var(--error)' : 'var(--border-hi)'}`,
     background: 'rgba(var(--bg-rgb),0.4)',
     color: 'var(--text)',
     fontSize: 14,
@@ -128,7 +158,7 @@ export default function QueryModal({ open, onClose }: { open: boolean; onClose: 
   }
 
   const errorStyle: React.CSSProperties = {
-    fontSize: 11.5, color: '#D64545', marginTop: 5,
+    fontSize: 11.5, color: 'var(--error)', marginTop: 5,
   }
 
   return (
@@ -143,9 +173,12 @@ export default function QueryModal({ open, onClose }: { open: boolean; onClose: 
         backdropFilter: 'blur(6px)',
         WebkitBackdropFilter: 'blur(6px)',
         animation: 'fadeIn .2s ease both',
+        overflowY: 'auto',
+        overscrollBehavior: 'contain',
       }}
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="query-modal-title"
@@ -163,6 +196,7 @@ export default function QueryModal({ open, onClose }: { open: boolean; onClose: 
         }}
       >
         <button
+          type="button"
           onClick={onClose}
           aria-label="Close"
           style={{
@@ -177,16 +211,16 @@ export default function QueryModal({ open, onClose }: { open: boolean; onClose: 
 
         {submitted ? (
           <div style={{ textAlign: 'center', padding: '20px 0' }}>
-            <p style={{ fontSize: 30, marginBottom: 16 }}>✅</p>
             <h3 style={{ fontFamily: 'var(--font)', fontSize: 22, color: 'var(--text)', marginBottom: 10 }}>
-              Message sent
+              Inquiry sent
             </h3>
-            <p style={{ fontSize: 13.5, color: 'var(--muted)', lineHeight: 1.7, marginBottom: 24 }}>
-              Thanks for reaching out — we've received your query and will get back to you shortly.
+            <p role="status" style={{ fontSize: 13.5, color: 'var(--muted)', lineHeight: 1.7, marginBottom: 24 }}>
+              Thanks for reaching out — Exter Cloud has received your project scope and will get back to you shortly.
             </p>
             <button
+              type="button"
               onClick={onClose}
-              style={{ padding: '10px 24px', borderRadius: 6, border: 'none', background: 'var(--accent)', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)' }}
+              style={{ padding: '10px 24px', borderRadius: 6, border: 'none', background: 'var(--accent)', color: 'var(--on-accent)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)' }}
             >
               Close
             </button>
@@ -201,6 +235,16 @@ export default function QueryModal({ open, onClose }: { open: boolean; onClose: 
             </p>
 
             <form onSubmit={handleSubmit} noValidate>
+              {Object.keys(touched).length === 4 && !isValid && (
+                <div
+                  ref={errorSummaryRef}
+                  role="alert"
+                  tabIndex={-1}
+                  style={{ ...errorStyle, padding: 12, margin: '0 0 16px', border: '1px solid var(--error)', borderRadius: 8 }}
+                >
+                  Please correct the highlighted fields before sending.
+                </div>
+              )}
               <div style={{ marginBottom: 16 }}>
                 <label style={labelStyle} htmlFor="qm-name">Name</label>
                 <input
@@ -210,24 +254,30 @@ export default function QueryModal({ open, onClose }: { open: boolean; onClose: 
                   value={name}
                   onChange={e => setName(e.target.value)}
                   onBlur={() => setTouched(t => ({ ...t, name: true }))}
+                  className="query-field"
+                  aria-invalid={!!showError('name')}
+                  aria-describedby={showError('name') ? 'qm-name-error' : undefined}
                   style={inputStyle(!!showError('name'))}
                   placeholder="Your name"
                 />
-                {showError('name') && <p style={errorStyle}>{errors.name}</p>}
+                {showError('name') && <p id="qm-name-error" role="alert" style={errorStyle}>{errors.name}</p>}
               </div>
 
               <div style={{ marginBottom: 16 }}>
-                <label style={labelStyle} htmlFor="qm-email">Email (optional)</label>
+                <label style={labelStyle} htmlFor="qm-email">Email</label>
                 <input
                   id="qm-email"
                   type="email"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   onBlur={() => setTouched(t => ({ ...t, email: true }))}
+                  className="query-field"
+                  aria-invalid={!!showError('email')}
+                  aria-describedby={showError('email') ? 'qm-email-error' : undefined}
                   style={inputStyle(!!showError('email'))}
                   placeholder="you@company.com"
                 />
-                {showError('email') && <p style={errorStyle}>{errors.email}</p>}
+                {showError('email') && <p id="qm-email-error" role="alert" style={errorStyle}>{errors.email}</p>}
               </div>
 
               <div style={{ marginBottom: 16 }}>
@@ -244,11 +294,14 @@ export default function QueryModal({ open, onClose }: { open: boolean; onClose: 
                     value={phone}
                     onChange={e => setPhone(e.target.value.replace(/[^\d\s-]/g, ''))}
                     onBlur={() => setTouched(t => ({ ...t, phone: true }))}
+                    className="query-field"
+                    aria-invalid={!!showError('phone')}
+                    aria-describedby={showError('phone') ? 'qm-phone-error' : undefined}
                     style={inputStyle(!!showError('phone'))}
                     placeholder="98765 43210"
                   />
                 </div>
-                {showError('phone') && <p style={errorStyle}>{errors.phone}</p>}
+                {showError('phone') && <p id="qm-phone-error" role="alert" style={errorStyle}>{errors.phone}</p>}
               </div>
 
               <div style={{ marginBottom: 24 }}>
@@ -258,25 +311,28 @@ export default function QueryModal({ open, onClose }: { open: boolean; onClose: 
                   value={message}
                   onChange={e => setMessage(e.target.value)}
                   onBlur={() => setTouched(t => ({ ...t, message: true }))}
+                  className="query-field"
+                  aria-invalid={!!showError('message')}
+                  aria-describedby={showError('message') ? 'qm-message-error' : undefined}
                   style={{ ...inputStyle(!!showError('message')), resize: 'vertical', minHeight: 96, fontFamily: 'var(--font)' }}
                   placeholder="What are you looking to build?"
                 />
-                {showError('message') && <p style={errorStyle}>{errors.message}</p>}
+                {showError('message') && <p id="qm-message-error" role="alert" style={errorStyle}>{errors.message}</p>}
               </div>
 
               {submitError && (
-                <p style={{ ...errorStyle, marginTop: 0, marginBottom: 12, textAlign: 'center' }}>{submitError}</p>
+                <p role="alert" style={{ ...errorStyle, marginTop: 0, marginBottom: 12, textAlign: 'center' }}>{submitError}</p>
               )}
 
               <button
                 type="submit"
-                disabled={!isValid || submitting}
+                disabled={submitting}
                 style={{
                   width: '100%', padding: '13px 24px', borderRadius: 6, border: 'none',
-                  background: isValid ? 'var(--accent)' : 'var(--border-hi)',
-                  color: isValid ? '#fff' : 'var(--muted)',
+                  background: 'var(--accent)',
+                  color: 'var(--on-accent)',
                   fontSize: 13.5, fontWeight: 600, letterSpacing: '0.02em',
-                  cursor: isValid && !submitting ? 'pointer' : 'not-allowed',
+                  cursor: !submitting ? 'pointer' : 'not-allowed',
                   opacity: submitting ? 0.7 : 1,
                   fontFamily: 'var(--font)', transition: 'background .2s, color .2s',
                 }}

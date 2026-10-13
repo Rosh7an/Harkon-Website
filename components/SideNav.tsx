@@ -2,24 +2,36 @@
 
 import { useEffect, useState } from 'react'
 
-const SECTIONS = ['hero', 'about', 'services', 'process', 'stats', 'cta']
+const SECTIONS = ['hero', 'about', 'services', 'process', 'stats', 'pricing', 'cta']
 
 export default function SideNav() {
   const [active, setActive] = useState(0)
 
   useEffect(() => {
-    const observers: IntersectionObserver[] = []
-    SECTIONS.forEach((id, idx) => {
-      const el = document.getElementById(id)
-      if (!el) return
-      const obs = new IntersectionObserver(
-        ([entry]) => { if (entry.isIntersecting) setActive(idx) },
-        { threshold: 0.45 }
-      )
-      obs.observe(el)
-      observers.push(obs)
-    })
-    return () => observers.forEach(o => o.disconnect())
+    const handleScroll = () => {
+      if (window.scrollY < 100) {
+        setActive(0)
+        return
+      }
+      
+      let currentIdx = 0
+      for (let i = 0; i < SECTIONS.length; i++) {
+        const el = document.getElementById(SECTIONS[i])
+        if (el) {
+          const rect = el.getBoundingClientRect()
+          // If the top of the section is above the middle-ish of the viewport
+          if (rect.top <= window.innerHeight * 0.4) {
+            currentIdx = i
+          }
+        }
+      }
+      setActive(currentIdx)
+    }
+
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    // Run once on mount after layout
+    setTimeout(handleScroll, 100)
+    return () => window.removeEventListener('scroll', handleScroll)
   }, [])
 
   const scrollTo = (id: string) => {

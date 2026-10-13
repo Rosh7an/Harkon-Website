@@ -128,12 +128,20 @@ export default function Services() {
     activeRef.current = n
   }, [])
 
+  const isInitialMount = useRef(true)
+
   /* ── Sync tab underline bar + scroll active tab into view ── */
   useEffect(() => {
     const tab = tabRefs.current[active]
     if (!tab) return
     setBarLeft(tab.offsetLeft)
     setBarWidth(tab.offsetWidth)
+    
+    if (isInitialMount.current) {
+      isInitialMount.current = false
+      return
+    }
+    
     tab.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
   }, [active])
 

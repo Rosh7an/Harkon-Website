@@ -112,7 +112,7 @@ export default function Hero() {
         style={{ textAlign: 'center', maxWidth: 960, width: '100%', animation: 'fadeUp .9s ease both' }}
       >
         {/* Badge */}
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, border: '1px solid rgba(216,90,48,.25)', background: 'rgba(216,90,48,.06)', color: 'var(--accent)', fontSize: 10, fontWeight: 500, letterSpacing: '0.14em', textTransform: 'uppercase', padding: '7px 16px', borderRadius: 3, marginBottom: 28 }}>
+        <div className="hidden sm:inline-flex" style={{ alignItems: 'center', gap: 8, border: '1px solid rgba(216,90,48,.25)', background: 'rgba(216,90,48,.06)', color: 'var(--accent)', fontSize: 10, fontWeight: 500, letterSpacing: '0.14em', textTransform: 'uppercase', padding: '7px 16px', borderRadius: 3, marginBottom: 28 }}>
           <div style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--accent)', boxShadow: '0 0 10px var(--accent)', animation: 'pulse 2s infinite', flexShrink: 0 }} />
           Digital solutions for growing businesses
         </div>

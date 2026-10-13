@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter, usePathname } from 'next/navigation'
 import Image from 'next/image'
 import ThemeToggle from '@/components/ThemeToggle'
 
@@ -10,9 +11,12 @@ const NAV_LINKS = [
   { label: 'Services', id: 'services' },
   { label: 'Process',  id: 'process'  },
   { label: 'Results',  id: 'stats'    },
+  { label: 'Pricing',  id: 'pricing'  },
 ]
 
 export default function Nav() {
+  const router   = useRouter()
+  const pathname = usePathname()
   const [scrolled,    setScrolled]    = useState(false)
   const [mobileOpen,  setMobileOpen]  = useState(false)
 
@@ -22,14 +26,33 @@ export default function Nav() {
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
 
+  // Lock body scroll when mobile menu is open
+  useEffect(() => {
+    if (mobileOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => { document.body.style.overflow = '' }
+  }, [mobileOpen])
+
   const scrollTo = (id: string) => {
+    setMobileOpen(false)
+    // Route-based links: use Next.js router for instant client-side navigation (no flash)
+    if (id.startsWith('/')) {
+      router.push(id)
+      return
+    }
+    // On /pricing (or any non-home page), section links should navigate home first
+    if (pathname !== '/') {
+      router.push('/#' + id)
+      return
+    }
+    // On home page: smooth scroll to section
     const el = document.getElementById(id)
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    } else {
-      window.location.href = '/#' + id
     }
-    setMobileOpen(false)
   }
 
   return (
@@ -45,10 +68,10 @@ export default function Nav() {
           alignItems:       'center',
           justifyContent:   'space-between',
           transition:       'all 0.4s ease',
-          background:       scrolled ? 'rgba(var(--bg-rgb),0.92)' : 'transparent',
+          background:       scrolled ? 'var(--bg)' : 'transparent',
           borderBottom:     scrolled ? '1px solid var(--border)' : 'none',
-          backdropFilter:   scrolled ? 'blur(20px)' : 'none',
-          WebkitBackdropFilter: scrolled ? 'blur(20px)' : 'none',
+          backdropFilter:   'none',
+          WebkitBackdropFilter: 'none',
         }}
       >
         {/* Logo */}
@@ -93,14 +116,20 @@ export default function Nav() {
           <ThemeToggle />
 
           <button
-            onClick={() => setMobileOpen(true)}
+            onClick={() => setMobileOpen(!mobileOpen)}
             aria-label="Menu"
-            className="flex md:hidden flex-col gap-1.5"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '12px 8px', margin: '-12px -8px' }}
+            className="flex md:hidden flex-col gap-1.5 items-center justify-center relative w-8 h-8"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, margin: '-4px' }}
           >
-            {[0,1,2].map(i => (
-              <span key={i} style={{ display: 'block', width: 22, height: 1.5, background: 'var(--text)', borderRadius: 1 }} />
-            ))}
+            {mobileOpen ? (
+              <span style={{ fontSize: 28, color: 'var(--text)', lineHeight: 1 }}>✕</span>
+            ) : (
+              <div className="flex flex-col gap-1.5">
+                {[0,1,2].map(i => (
+                  <span key={i} style={{ display: 'block', width: 22, height: 1.5, background: 'var(--text)', borderRadius: 1 }} />
+                ))}
+              </div>
+            )}
           </button>
         </div>
       </nav>
@@ -108,15 +137,8 @@ export default function Nav() {
       {/* Mobile overlay */}
       {mobileOpen && (
         <div
-          style={{ position: 'fixed', inset: 0, background: 'rgba(var(--bg-rgb),0.97)', zIndex: 490, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 32, backdropFilter: 'blur(20px)' }}
+          style={{ position: 'fixed', inset: 0, background: 'var(--bg)', zIndex: 490, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 32 }}
         >
-          <button
-            onClick={() => setMobileOpen(false)}
-            aria-label="Close menu"
-            style={{ position: 'absolute', top: 20, right: 20, background: 'none', border: 'none', color: 'var(--muted)', fontSize: 28, cursor: 'pointer', padding: 8, lineHeight: 1 }}
-          >
-            ✕
-          </button>
           {NAV_LINKS.map(({ label, id }) => (
             <button
               key={id}
@@ -130,7 +152,7 @@ export default function Nav() {
           ))}
           <button
             onClick={() => scrollTo('cta')}
-            style={{ fontFamily: 'var(--font)', fontSize: 28, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', letterSpacing: '-0.03em' }}
+            style={{ marginTop: 16, padding: '14px 32px', border: '1px solid var(--accent)', borderRadius: 8, color: 'var(--accent)', fontSize: 20, background: 'rgba(216,90,48,0.05)', cursor: 'pointer', fontFamily: 'var(--font)', letterSpacing: '0.05em' }}
           >
             Get started
           </button>
