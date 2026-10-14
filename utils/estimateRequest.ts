@@ -70,6 +70,12 @@ export function parseEstimateRequest(input: unknown): EstimateRequest {
     parsedAnswers[questionId] = answer
   }
 
+  for (const questionId of allowedFollowUps.keys()) {
+    if (!Object.hasOwn(parsedAnswers, questionId)) {
+      throw new EstimateValidationError('Answer all required follow-up questions.')
+    }
+  }
+
   return { projectTypeId, featureIds: parsedFeatureIds, followUpAnswers: parsedAnswers, riskProfile, timelineSpeed }
 }
 

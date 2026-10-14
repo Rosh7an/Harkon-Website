@@ -19,6 +19,10 @@ Marketing website for Exter Cloud. Built with Next.js 15, React 19, TypeScript, 
 - Dark/light theme toggle (dark by default, preference saved to `localStorage`)
 - Branded splash screen on initial load
 - Query modal with country-code phone validation
+- Business discovery and multi-product solution builder at `/pricing`
+
+See [Discovery release notes](docs/discovery-release.md) for configuration, pricing
+assumptions, session limits and the public-pilot verification gate.
 
 ## Project Structure
 
