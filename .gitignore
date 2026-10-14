@@ -31,16 +31,3 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-
-# Machine-specific Codex hook (contains this machine's Graphify executable path).
-/.codex/hooks.json
-
-# Keep current graph/report/manifest files shared; ignore local Graphify state.
-/graphify-out/.*
-/graphify-out/cache/
-/graphify-out/reflections/
-/graphify-out/20??-??-??/
-
-# Generated PDF verification samples remain available locally.
-/output/pdf/exter-cloud-estimate-sample.pdf
-/output/pdf/exter-cloud-estimate-preview.png
