@@ -11,7 +11,7 @@ const NAV_LINKS = [
   { label: 'Services', id: 'services' },
   { label: 'Process',  id: 'process'  },
   { label: 'Results',  id: 'stats'    },
-  { label: 'Pricing',  id: 'pricing'  },
+  { label: 'Solution Planner',  id: 'pricing'  },
 ]
 
 export default function Nav() {

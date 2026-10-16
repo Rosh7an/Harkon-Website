@@ -47,7 +47,7 @@ export default function SideNav() {
         <button
           key={id}
           onClick={() => scrollTo(id)}
-          aria-label={id}
+          aria-label={id === 'pricing' ? 'Solution Planner' : id}
           style={{
             width:        4,
             height:       active === i ? 20 : 4,
