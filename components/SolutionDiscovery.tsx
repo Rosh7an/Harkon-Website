@@ -81,7 +81,13 @@ export function proposalSummary(view: DiscoveryResponse): string {
   return lines.join('\n')
 }
 
-export default function SolutionDiscovery({ contactLinks = emptyContactLinks }: { contactLinks?: BusinessContactLinks }) {
+export default function SolutionDiscovery({
+  contactLinks = emptyContactLinks,
+  headingLevel = 'h1',
+}: {
+  contactLinks?: BusinessContactLinks
+  headingLevel?: 'h1' | 'h2'
+}) {
   const [view, setView] = useState<DiscoveryResponse | null>(null)
   const [scope, setScope] = useState<SolutionScope>(emptyScope)
   const [answer, setAnswer] = useState('')
@@ -312,6 +318,7 @@ export default function SolutionDiscovery({ contactLinks = emptyContactLinks }: 
     ...scope.integrationIds.map(id => ({ name: INTEGRATION_CHOICES[id].name, excluded: !pricedScope.integrationIds.includes(id) })),
     ...scope.modifierIds.map(id => ({ name: MODIFIER_CHOICES[id].name, excluded: !pricedScope.modifierIds.includes(id) })),
   ]
+  const IntroHeading = headingLevel
 
   async function exportEstimate() {
     if (!view) return
@@ -328,7 +335,7 @@ export default function SolutionDiscovery({ contactLinks = emptyContactLinks }: 
   return <section className={styles.experience} data-active={!!session} aria-label="Solution discovery">
     <header className={styles.intro}>
       <p className={styles.eyebrow}>YOUR NEXT CHAPTER · SOLUTION PLANNER</p>
-      <h1>A clear plan for your <span>next step.</span></h1>
+      <IntroHeading>A clear plan for your <span>next step.</span></IntroHeading>
       <p>Start with what’s slowing you down. We’ll help you decide what to build—no technical knowledge needed.</p>
       <div className={styles.modeBar} role="group" aria-label="Choose your approach">
         <button className={`${secondary} ${styles.modeButton} ${styles.guidedMode}`} aria-pressed={session?.mode === 'guided'} disabled={busy || !ready} onClick={() => void switchMode('guided')}>Guide me</button>

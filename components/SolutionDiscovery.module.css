@@ -53,8 +53,8 @@
 }
 .intro { text-align: left; margin: 0 auto 1rem; }
 .eyebrow { font-size: .6875rem; font-weight: 700; letter-spacing: .14em; color: var(--muted); }
-.intro h1 { font-size: clamp(1.6rem, 2.5vw, 2rem); line-height: 1.2; font-weight: 750; letter-spacing: -.035em; margin: .5rem 0; }
-.intro h1 span { color: var(--accent-text); }
+.intro :is(h1, h2) { font-size: clamp(1.6rem, 2.5vw, 2rem); line-height: 1.2; font-weight: 750; letter-spacing: -.035em; margin: .5rem 0; }
+.intro :is(h1, h2) span { color: var(--accent-text); }
 .intro > p:not(.eyebrow) { color: var(--muted); line-height: 1.6; }
 .modeBar { display: inline-flex; flex-wrap: wrap; gap: .5rem; margin: .8rem 0 .35rem; }
 .modeBar button { padding: .65rem 1.15rem; border-radius: .85rem; }
@@ -147,8 +147,8 @@
 @media (max-width: 640px) {
   .experience { margin: .5rem .5rem 2rem; padding: 1rem; border-radius: 1.5rem; }
   .intro { text-align: left; }
-  .intro h1 { max-width: 19rem; }
-  .experience[data-active='true'] .intro h1 { font-size: 1.25rem; }
+  .intro :is(h1, h2) { max-width: 19rem; }
+  .experience[data-active='true'] .intro :is(h1, h2) { font-size: 1.25rem; }
   .experience[data-active='true'] .intro > p:not(.modeHint) { display: none; }
   .modeBar { display: flex; justify-content: center; width: 100%; }
   .modeBar button { padding-inline: .75rem; font-size: .875rem; }

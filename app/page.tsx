@@ -6,11 +6,17 @@ import About            from '@/components/About'
 import Services         from '@/components/Services'
 import Process          from '@/components/Process'
 import Stats            from '@/components/Stats'
-import PricingEstimator from '@/components/PricingEstimator'
+import SolutionDiscovery from '@/components/SolutionDiscovery'
 import CTA              from '@/components/CTA'
 import Footer           from '@/components/Footer'
+import { businessContactLinks } from '@/utils/businessContact'
 
 export default function Home() {
+  const contactLinks = businessContactLinks({
+    phone: process.env.CONTACT_PHONE || undefined,
+    whatsapp: process.env.NEXT_PUBLIC_WHATSAPP_PHONE,
+  })
+
   return (
     <>
       <Nav />
@@ -22,15 +28,7 @@ export default function Home() {
       <Process />
       <Stats />
       <section id="pricing" style={{ background: 'var(--bg)' }}>
-        <div className="text-center pt-16 px-4">
-          <h2 className="text-4xl sm:text-5xl font-extrabold tracking-tight mb-3">
-            Interactive <span className="text-[var(--accent)]">Cost Estimator</span>
-          </h2>
-          <p className="text-base sm:text-lg text-[var(--muted)] max-w-2xl mx-auto">
-            Transparent, enterprise-grade cost modeling. Select your project specifications below.
-          </p>
-        </div>
-        <PricingEstimator />
+        <SolutionDiscovery contactLinks={contactLinks} headingLevel="h2" />
       </section>
       <CTA />
       <Footer />
