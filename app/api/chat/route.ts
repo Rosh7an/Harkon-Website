@@ -4,7 +4,7 @@ import { SYSTEM_PROMPT_AI } from '@/app/constant'
 
 // Prefer the server-only name. The legacy value is read only in this server route so
 // existing deployments keep working while their environment configuration is migrated.
-const apiKey = process.env.GROQ_API_KEY || process.env.NEXT_PUBLIC_GROQ_API_KEY
+const apiKey = process.env.GROQ_API_KEY || process.env.NEXT_PRIVATE_GROQ_API_KEY
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string }
 
