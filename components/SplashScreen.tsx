@@ -1,25 +1,30 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { usePathname } from 'next/navigation'
 import Image from 'next/image'
 
 export default function SplashScreen() {
+  const pathname = usePathname()
+  const isHome = pathname === '/'
   const [visible, setVisible] = useState(true)
   const [fading, setFading] = useState(false)
 
+  // All hooks must be declared before any conditional return (Rules of Hooks).
+  // Guard logic lives inside the effect, not above it.
   useEffect(() => {
-    // Prevent browser from restoring a previous scroll position
+    if (!isHome) return
     if ('scrollRestoration' in history) {
       history.scrollRestoration = 'manual'
     }
     window.scrollTo(0, 0)
-
-    const fadeTimer = setTimeout(() => setFading(true), 900)
+    const fadeTimer   = setTimeout(() => setFading(true),   900)
     const removeTimer = setTimeout(() => setVisible(false), 1300)
     return () => { clearTimeout(fadeTimer); clearTimeout(removeTimer) }
-  }, [])
+  }, [isHome])
 
-  if (!visible) return null
+  // Don't render on non-home routes or after the fade completes
+  if (!isHome || !visible) return null
 
   return (
     <div

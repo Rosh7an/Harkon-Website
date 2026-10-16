@@ -69,6 +69,13 @@ export default function Process() {
     updateBar(n)
     setDetailVisible(false)
     setTimeout(() => setDetailVisible(true), 180)
+
+    const tab = tabRefs.current[n]
+    if (tab && tab.parentElement) {
+      const parent = tab.parentElement
+      const scrollLeft = tab.offsetLeft - (parent.offsetWidth / 2) + (tab.offsetWidth / 2)
+      parent.scrollTo({ left: scrollLeft, behavior: 'smooth' })
+    }
   }, [updateBar])
 
   useEffect(() => {
@@ -158,6 +165,7 @@ export default function Process() {
           {/* Prev arrow — overlaps left edge of stage */}
           <button
             aria-label="Previous step"
+            className="proc-prev-btn"
             onClick={() => goProc(procIdx - 1)}
             disabled={procIdx === 0}
             style={{ position: 'absolute', left: 20, top: '50%', transform: 'translateY(-50%)', zIndex: 10, width: 40, height: 40, border: '1px solid var(--border-hi)', borderRadius: 8, background: 'rgba(var(--bg-rgb),.75)', backdropFilter: 'blur(12px)', color: 'rgba(var(--text-rgb),.75)', fontSize: 15, cursor: procIdx === 0 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font)', transition: 'all .25s', opacity: procIdx === 0 ? 0.25 : 1, pointerEvents: procIdx === 0 ? 'none' : 'auto' }}
@@ -191,6 +199,7 @@ export default function Process() {
           {/* Next arrow — overlaps right edge of stage */}
           <button
             aria-label="Next step"
+            className="proc-next-btn"
             onClick={() => goProc(procIdx + 1)}
             disabled={procIdx === STEPS.length - 1}
             style={{ position: 'absolute', right: 20, top: '50%', transform: 'translateY(-50%)', zIndex: 10, width: 40, height: 40, border: '1px solid var(--border-hi)', borderRadius: 8, background: 'rgba(var(--bg-rgb),.75)', backdropFilter: 'blur(12px)', color: 'rgba(var(--text-rgb),.75)', fontSize: 15, cursor: procIdx === STEPS.length - 1 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font)', transition: 'all .25s', opacity: procIdx === STEPS.length - 1 ? 0.25 : 1, pointerEvents: procIdx === STEPS.length - 1 ? 'none' : 'auto' }}

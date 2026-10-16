@@ -11,6 +11,8 @@
   --border-hi: rgba(255,255,255,0.18);
   --accent: #D85A30;
   --accent2: #F0997B;
+  --on-accent: #07101A;
+  --error: #FF8585;
   --text: #F5F3EE;
   --muted: #B9C4CD;
   --muted2: #7C8894;
@@ -29,6 +31,8 @@
   --border-hi: rgba(12,42,67,0.18);
   --accent: #D85A30;
   --accent2: #0C2A43;
+  --on-accent: #07101A;
+  --error: #A61B1B;
   --text: #0C2A43;
   --muted: #3A3A38;
   --muted2: #6B6A66;
@@ -39,10 +43,10 @@
 
 /* ── BASE ── */
 *, *::before, *::after { box-sizing: border-box; }
-html { scroll-behavior: auto; overflow-x: hidden; }
+html { scroll-behavior: smooth; overflow-x: hidden; }
 
 /* ── SCROLL OFFSET: clears the fixed nav so sections land below it, not hidden behind it ── */
-#hero, #about, #services, #process, #stats, #cta {
+#hero, #about, #services, #process, #stats, #pricing, #cta {
   scroll-margin-top: 88px;
 }
 body {
@@ -273,6 +277,12 @@ button, a, [role="button"] {
   touch-action: manipulation;
 }
 
+.query-field:focus-visible {
+  outline: 2px solid var(--accent) !important;
+  outline-offset: 2px;
+  border-color: var(--accent) !important;
+}
+
 /* ── THEME-CONDITIONAL VISIBILITY ── */
 .show-on-dark { display: block; }
 .show-on-light { display: none; }
@@ -318,13 +328,17 @@ button, a, [role="button"] {
 /* ── MOBILE ≤768px ── */
 @media (max-width: 768px) {
   .snav { display: none; }
-  .svc-section { height: 560px !important; min-height: 0 !important; }
+  .svc-section { height: 660px !important; min-height: 0 !important; }
 
   /* Process 3D cards */
-  .proc-card        { width: 186px; height: 224px; padding: 16px 14px; }
+  .proc-card        { width: 186px; height: 256px; padding: 18px 14px; }
   .proc-card h3     { font-size: 15px !important; }
   .proc-card p      { font-size: 11px !important; }
-  .proc-stage-outer { height: 252px; }
+  .proc-stage-outer { height: 286px; }
+
+  /* Process navigation arrows on mobile */
+  .proc-prev-btn { left: -4px !important; width: 36px !important; height: 36px !important; }
+  .proc-next-btn { right: -4px !important; width: 36px !important; height: 36px !important; }
 
   /* Process detail panel — hidden on mobile to prevent overflow */
   .proc-detail-wrap { display: none !important; }
@@ -337,7 +351,7 @@ button, a, [role="button"] {
   .svc-prev-btn { left: 16px !important; top: auto !important; bottom: 20px !important; transform: none !important; width: 40px !important; height: 40px !important; }
   .svc-next-btn { right: 16px !important; top: auto !important; bottom: 20px !important; transform: none !important; width: 40px !important; height: 40px !important; }
   .svc-dot-row-wrap { bottom: 70px; left: 50%; transform: translateX(-50%); }
-  .svc-card-panel   { padding: 20px 20px 90px; }
+  .svc-card-panel   { padding: 40px 20px 90px !important; justify-content: flex-start !important; }
 
   /* Stats cards */
   .stat-card { padding: 22px 16px !important; }
