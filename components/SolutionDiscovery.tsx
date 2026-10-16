@@ -81,7 +81,13 @@ export function proposalSummary(view: DiscoveryResponse): string {
   return lines.join('\n')
 }
 
-export default function SolutionDiscovery({ contactLinks = emptyContactLinks }: { contactLinks?: BusinessContactLinks }) {
+export default function SolutionDiscovery({
+  contactLinks = emptyContactLinks,
+  headingLevel = 'h1',
+}: {
+  contactLinks?: BusinessContactLinks
+  headingLevel?: 'h1' | 'h2'
+}) {
   const [view, setView] = useState<DiscoveryResponse | null>(null)
   const [scope, setScope] = useState<SolutionScope>(emptyScope)
   const [answer, setAnswer] = useState('')
@@ -107,6 +113,64 @@ export default function SolutionDiscovery({ contactLinks = emptyContactLinks }: 
   const locked = useRef(false)
   const pending = useRef<AbortController | null>(null)
   const questionHeading = useRef<HTMLHeadingElement>(null)
+  const sectionRef = useRef<HTMLElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
+  const changingMode = useRef(false)
+
+  useEffect(() => {
+    const section = sectionRef.current
+    if (!section || typeof IntersectionObserver === 'undefined') return
+    const observer = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        (entry.target as HTMLElement).dataset.revealVisible = String(entry.isIntersecting)
+      })
+    }, { threshold: 0, rootMargin: '-70px 0px -24px 0px' })
+    const observed = new Set<HTMLElement>()
+    const register = () => {
+      observed.forEach(element => {
+        if (!section.contains(element)) { observer.unobserve(element); observed.delete(element) }
+      })
+      const selector = `.${styles.sectionHeading} > *, .${styles.intro} > :not(.${styles.modeBar}), .${styles.modeBar} > button, .${styles.progressPanel} > *, .${styles.questionPanel} > *, .${styles.summaryHeader}, .${styles.summaryBody}, .${styles.summaryFooter}, .${styles.glass} > h2, .${styles.glass} > p, .${styles.glass} > button, .${styles.sessionTools} > details`
+      section.querySelectorAll<HTMLElement>(selector).forEach((element, index) => {
+        if (observed.has(element) || element.closest('[data-reveal]')) return
+        element.dataset.reveal = ''
+        element.style.setProperty('--reveal-enter', `${Math.min(index * 0.09, 0.58)}s`)
+        element.style.setProperty('--reveal-exit', `${Math.max(0, 0.24 - index * 0.04)}s`)
+        observed.add(element)
+        observer.observe(element)
+      })
+    }
+    register()
+    const mutations = new MutationObserver(register)
+    mutations.observe(section, { childList: true, subtree: true })
+    return () => { mutations.disconnect(); observer.disconnect() }
+  }, [])
+
+  async function animateModeChange(mode: DiscoveryMode) {
+    if (changingMode.current || locked.current || !ready || currentView.current?.session.mode === mode) return
+    changingMode.current = true
+    const panel = contentRef.current
+    const reduceMotion = typeof window.matchMedia !== 'function' || window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    let exits: Animation[] = []
+    const visibleElements = () => panel ? Array.from(panel.querySelectorAll<HTMLElement>('[data-reveal-visible="true"]')) : []
+    try {
+      if (panel && !reduceMotion && typeof panel.animate === 'function') {
+        exits = visibleElements().reverse().map((element, index) => element.animate([{ opacity: 1, transform: 'translateY(0)' }, { opacity: 0, transform: 'translateY(14px)' }], { duration: 160, delay: Math.min(index * 35, 140), easing: 'ease-in', fill: 'forwards' }))
+        await Promise.all(exits.map(animation => animation.finished.catch(() => {})))
+      }
+      if (!mounted.current) return
+      await switchMode(mode)
+    } finally {
+      exits.forEach(animation => animation.cancel())
+      if (mounted.current && panel && !reduceMotion && typeof panel.animate === 'function') {
+        requestAnimationFrame(() => {
+          if (!mounted.current) return
+          visibleElements().forEach((element, index) => element.animate([{ opacity: 0, transform: 'translateY(28px)' }, { opacity: 1, transform: 'translateY(0)' }], { duration: 600, delay: Math.min(index * 70, 280), easing: 'ease', fill: 'backwards' }))
+        })
+      }
+      changingMode.current = false
+    }
+  }
   function openProposal(purpose: 'query' | 'callback') { setProposalPurpose(purpose); setProposalOpen(true) }
 
   const persistDrafts = useCallback((activeMode: DiscoveryMode) => {
@@ -312,6 +376,7 @@ export default function SolutionDiscovery({ contactLinks = emptyContactLinks }: 
     ...scope.integrationIds.map(id => ({ name: INTEGRATION_CHOICES[id].name, excluded: !pricedScope.integrationIds.includes(id) })),
     ...scope.modifierIds.map(id => ({ name: MODIFIER_CHOICES[id].name, excluded: !pricedScope.modifierIds.includes(id) })),
   ]
+  const IntroHeading = headingLevel
 
   async function exportEstimate() {
     if (!view) return
@@ -325,17 +390,22 @@ export default function SolutionDiscovery({ contactLinks = emptyContactLinks }: 
     finally { setExporting(false) }
   }
 
-  return <section className={styles.experience} data-active={!!session} aria-label="Solution discovery">
-    <header className={styles.intro}>
-      <p className={styles.eyebrow}>YOUR NEXT CHAPTER · SOLUTION PLANNER</p>
-      <h1>A clear plan for your <span>next step.</span></h1>
+  return <section ref={sectionRef} className={styles.plannerSection} aria-label="Solution Planner">
+    <header className={styles.sectionHeading}>
+      <IntroHeading>A clear plan for your<br /><span>next step.</span></IntroHeading>
       <p>Start with what’s slowing you down. We’ll help you decide what to build—no technical knowledge needed.</p>
+    </header>
+    <div className={styles.experience} data-active={!!session}>
+    <header className={styles.intro}>
+      <h3 className={styles.approachHeading}>How would you like to build your plan?</h3>
+      <p className={styles.approachDescription}>Answer a few questions with us, or choose what you need yourself.</p>
       <div className={styles.modeBar} role="group" aria-label="Choose your approach">
-        <button className={`${secondary} ${styles.modeButton} ${styles.guidedMode}`} aria-pressed={session?.mode === 'guided'} disabled={busy || !ready} onClick={() => void switchMode('guided')}>Guide me</button>
-        <button className={`${secondary} ${styles.modeButton} ${styles.manualMode}`} aria-pressed={session?.mode === 'manual'} disabled={busy || !ready} onClick={() => void switchMode('manual')}>Build my own plan</button>
+        <button className={`${secondary} ${styles.modeButton} ${styles.guidedMode}`} aria-pressed={session?.mode === 'guided'} disabled={busy || !ready} onClick={() => void animateModeChange('guided')}>Guide me</button>
+        <button className={`${secondary} ${styles.modeButton} ${styles.manualMode}`} aria-pressed={session?.mode === 'manual'} disabled={busy || !ready} onClick={() => void animateModeChange('manual')}>Build my own plan</button>
       </div>
       <p className={styles.modeHint}>Each approach keeps its own draft and progress in this tab for up to 24 hours.</p>
     </header>
+    <div ref={contentRef}>
     <p role="status" className="sr-only">{busy ? 'Saving your discovery…' : ready ? 'Ready' : 'Restoring your discovery…'}</p>
     {error && <div role="alert" className="rounded-xl border border-[var(--error)] text-[var(--error)] p-4 mb-6">{error}</div>}
     {recovery && <div className={`${styles.glass} p-5 mb-6 space-y-3`} role="status" aria-label="Session recovery">
@@ -522,5 +592,7 @@ export default function SolutionDiscovery({ contactLinks = emptyContactLinks }: 
       </div>
       <QueryModal open={proposalOpen} onClose={() => setProposalOpen(false)} purpose={proposalPurpose} initialMessage={proposalSummary({ ...view, reviewItems, session: { ...session, scope } })} />
     </>}
+    </div>
+    </div>
   </section>
 }
