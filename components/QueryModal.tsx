@@ -1,8 +1,10 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { COUNTRY_CODES } from '@/components/countryCodes'
 import CountrySelect from '@/components/CountrySelect'
+import { CONTACT_MESSAGE_MAX } from '@/utils/contactLimits'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const DEFAULT_ISO = 'IN'
@@ -12,6 +14,7 @@ interface Errors {
   email?: string
   phone?: string
   message?: string
+  preferredTime?: string
 }
 
 export function validate(fields: { name: string; email: string; phone: string; message: string }, phoneLen: [number, number]): Errors {
@@ -19,10 +22,11 @@ export function validate(fields: { name: string; email: string; phone: string; m
 
   if (!fields.name.trim()) errors.name = 'Name is required.'
   else if (fields.name.trim().length < 2) errors.name = 'Name looks too short.'
+  else if (fields.name.trim().length > 100) errors.name = 'Name must be at most 100 characters.'
 
   if (!fields.email.trim()) {
     errors.email = 'Email is required.'
-  } else if (!EMAIL_RE.test(fields.email.trim())) {
+  } else if (fields.email.trim().length > 254 || !EMAIL_RE.test(fields.email.trim())) {
     errors.email = 'Enter a valid email address.'
   }
 
@@ -37,16 +41,19 @@ export function validate(fields: { name: string; email: string; phone: string; m
 
   if (!fields.message.trim()) errors.message = 'Message is required.'
   else if (fields.message.trim().length < 10) errors.message = 'Tell us a bit more (min 10 characters).'
+  else if (fields.message.trim().length > CONTACT_MESSAGE_MAX) errors.message = `Message must be at most ${CONTACT_MESSAGE_MAX.toLocaleString()} characters.`
 
   return errors
 }
 
-export default function QueryModal({ open, onClose, initialMessage }: { open: boolean; onClose: () => void; initialMessage?: string }) {
+export default function QueryModal({ open, onClose, initialMessage, purpose = 'query' }: { open: boolean; onClose: () => void; initialMessage?: string; purpose?: 'query' | 'callback' }) {
+  const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null)
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [countryIso, setCountryIso] = useState(DEFAULT_ISO)
   const [phone, setPhone] = useState('')
   const [message, setMessage] = useState('')
+  const [preferredTime, setPreferredTime] = useState('')
   const [touched, setTouched] = useState<Record<string, boolean>>({})
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -56,14 +63,20 @@ export default function QueryModal({ open, onClose, initialMessage }: { open: bo
   const errorSummaryRef = useRef<HTMLDivElement>(null)
 
   const country = COUNTRY_CODES.find(c => c.iso === countryIso) ?? COUNTRY_CODES.find(c => c.iso === DEFAULT_ISO)!
-  const errors = validate({ name, email, phone, message }, country.len)
+  const errors: Errors = { ...validate({ name, email, phone, message }, country.len), ...(purpose === 'callback' && preferredTime.trim().length > 200 ? { preferredTime: 'Keep the time preference within 200 characters.' } : {}) }
   const isValid = Object.keys(errors).length === 0
+
+  // Mount at page level so isolated/transformed callers cannot trap the overlay
+  // below the footer. The first server and client renders both stay empty.
+  useEffect(() => { setPortalRoot(document.body) }, [])
 
   useEffect(() => {
     if (!open) return
     if (initialMessage) {
       setMessage(initialMessage)
     }
+    const previousBodyOverflow = document.body.style.overflow
+    const previousRootOverflow = document.documentElement.style.overflow
     document.body.style.overflow = 'hidden'
     document.documentElement.style.overflow = 'hidden'
     const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null
@@ -88,8 +101,8 @@ export default function QueryModal({ open, onClose, initialMessage }: { open: bo
     }
     document.addEventListener('keydown', onKey)
     return () => {
-      document.body.style.overflow = ''
-      document.documentElement.style.overflow = ''
+      document.body.style.overflow = previousBodyOverflow
+      document.documentElement.style.overflow = previousRootOverflow
       document.removeEventListener('keydown', onKey)
       clearTimeout(t)
       previouslyFocused?.focus()
@@ -98,18 +111,18 @@ export default function QueryModal({ open, onClose, initialMessage }: { open: bo
 
   useEffect(() => {
     if (!open) {
-      setName(''); setEmail(''); setCountryIso(DEFAULT_ISO); setPhone(''); setMessage('')
+      setName(''); setEmail(''); setCountryIso(DEFAULT_ISO); setPhone(''); setMessage(''); setPreferredTime('')
       setTouched({}); setSubmitted(false); setSubmitting(false); setSubmitError('')
     }
   }, [open])
 
-  if (!open) return null
+  if (!open || !portalRoot) return null
 
   const showError = (field: keyof Errors) => touched[field] && errors[field]
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setTouched({ name: true, email: true, phone: true, message: true })
+    setTouched({ name: true, email: true, phone: true, message: true, ...(purpose === 'callback' ? { preferredTime: true } : {}) })
     if (!isValid || submitting) {
       setTimeout(() => errorSummaryRef.current?.focus(), 0)
       return
@@ -127,6 +140,7 @@ export default function QueryModal({ open, onClose, initialMessage }: { open: bo
           email: email.trim(),
           phone: `${country.dial} ${phone.trim()}`,
           message: message.trim(),
+          ...(purpose === 'callback' ? { intent: 'callback', preferredTime: preferredTime.trim() } : {}),
         }),
       })
       const data = await response.json() as { success?: boolean; error?: string }
@@ -161,7 +175,7 @@ export default function QueryModal({ open, onClose, initialMessage }: { open: bo
     fontSize: 11.5, color: 'var(--error)', marginTop: 5,
   }
 
-  return (
+  return createPortal(
     <div
       role="presentation"
       onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}
@@ -184,6 +198,9 @@ export default function QueryModal({ open, onClose, initialMessage }: { open: bo
         aria-labelledby="query-modal-title"
         style={{
           width: '100%', maxWidth: 440,
+          maxHeight: 'calc(100dvh - 40px)',
+          overflowY: 'auto', overscrollBehavior: 'contain',
+          flexShrink: 0,
           borderRadius: 18,
           border: '1px solid var(--border-hi)',
           background: 'rgba(var(--bg-rgb),0.62)',
@@ -211,11 +228,11 @@ export default function QueryModal({ open, onClose, initialMessage }: { open: bo
 
         {submitted ? (
           <div style={{ textAlign: 'center', padding: '20px 0' }}>
-            <h3 style={{ fontFamily: 'var(--font)', fontSize: 22, color: 'var(--text)', marginBottom: 10 }}>
-              Inquiry sent
+            <h3 id="query-modal-title" style={{ fontFamily: 'var(--font)', fontSize: 22, color: 'var(--text)', marginBottom: 10 }}>
+              {purpose === 'callback' ? 'Call request sent' : 'Inquiry sent'}
             </h3>
             <p role="status" style={{ fontSize: 13.5, color: 'var(--muted)', lineHeight: 1.7, marginBottom: 24 }}>
-              Thanks for reaching out — Exter Cloud has received your project scope and will get back to you shortly.
+              {purpose === 'callback' ? 'Your details and session summary have been sent. The team will contact you to confirm a suitable time. This is a call request, not a booked appointment.' : 'Thanks for reaching out — Exter Cloud has received your project scope and will get back to you shortly.'}
             </p>
             <button
               type="button"
@@ -228,14 +245,14 @@ export default function QueryModal({ open, onClose, initialMessage }: { open: bo
         ) : (
           <>
             <h3 id="query-modal-title" style={{ fontFamily: 'var(--font)', fontSize: 22, color: 'var(--text)', marginBottom: 6, letterSpacing: '-0.02em' }}>
-              Send a query
+              {purpose === 'callback' ? 'Request a team call' : 'Send a query'}
             </h3>
             <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 22, lineHeight: 1.6 }}>
-              Tell us what you need — we'll get back to you shortly.
+              {purpose === 'callback' ? 'Discuss your answers, website/app needs and the estimate with the team. We’ll confirm a time with you before the call.' : "Tell us what you need — we'll get back to you shortly."}
             </p>
 
             <form onSubmit={handleSubmit} noValidate>
-              {Object.keys(touched).length === 4 && !isValid && (
+              {['name', 'email', 'phone', 'message'].every(key => touched[key]) && !isValid && (
                 <div
                   ref={errorSummaryRef}
                   role="alert"
@@ -304,10 +321,17 @@ export default function QueryModal({ open, onClose, initialMessage }: { open: bo
                 {showError('phone') && <p id="qm-phone-error" role="alert" style={errorStyle}>{errors.phone}</p>}
               </div>
 
+              {purpose === 'callback' && <div style={{ marginBottom: 16 }}>
+                <label style={labelStyle} htmlFor="qm-preferred-time">Preferred time and timezone (optional)</label>
+                <input id="qm-preferred-time" type="text" maxLength={200} className="query-field" value={preferredTime} onChange={e => setPreferredTime(e.target.value)} onBlur={() => setTouched(t => ({ ...t, preferredTime: true }))} style={inputStyle(!!showError('preferredTime'))} placeholder="For example: weekdays after 3pm, India time" aria-invalid={!!showError('preferredTime')} aria-describedby={showError('preferredTime') ? 'qm-preferred-time-error' : undefined} />
+                {showError('preferredTime') && <p id="qm-preferred-time-error" role="alert" style={errorStyle}>{errors.preferredTime}</p>}
+              </div>}
+
               <div style={{ marginBottom: 24 }}>
                 <label style={labelStyle} htmlFor="qm-message">Message</label>
                 <textarea
                   id="qm-message"
+                  maxLength={CONTACT_MESSAGE_MAX}
                   value={message}
                   onChange={e => setMessage(e.target.value)}
                   onBlur={() => setTouched(t => ({ ...t, message: true }))}
@@ -337,12 +361,13 @@ export default function QueryModal({ open, onClose, initialMessage }: { open: bo
                   fontFamily: 'var(--font)', transition: 'background .2s, color .2s',
                 }}
               >
-                {submitting ? 'Sending…' : 'Send'}
+                {submitting ? 'Sending…' : purpose === 'callback' ? 'Request call' : 'Send'}
               </button>
             </form>
           </>
         )}
       </div>
-    </div>
+    </div>,
+    portalRoot,
   )
 }

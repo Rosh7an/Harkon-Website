@@ -69,11 +69,11 @@ export const PROJECT_BY_ID = Object.fromEntries(PROJECT_CATALOG.map(project => [
 export const FEATURE_BY_ID = Object.fromEntries(FEATURE_CATALOG.map(feature => [feature.id, feature])) as Record<FeatureId, CatalogFeature>
 
 export function isProjectType(value: unknown): value is ProjectType {
-  return typeof value === 'string' && value in PROJECT_BY_ID
+  return typeof value === 'string' && Object.hasOwn(PROJECT_BY_ID, value)
 }
 
 export function isFeatureId(value: unknown): value is FeatureId {
-  return typeof value === 'string' && value in FEATURE_BY_ID
+  return typeof value === 'string' && Object.hasOwn(FEATURE_BY_ID, value)
 }
 
 export function isRiskProfile(value: unknown): value is RiskProfile {
