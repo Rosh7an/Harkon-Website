@@ -16,7 +16,7 @@ export const DISCOVERY_OUTPUT_SCHEMA = object({
 })
 export async function consult(session: DiscoverySession, answer: string) {
   if (process.env.DISCOVERY_AI_ENABLED === 'false') return null
-  const apiKey = process.env.GROQ_API_KEY || process.env.NEXT_PUBLIC_GROQ_API_KEY
+  const apiKey = process.env.GROQ_API_KEY || process.env.NEXT_PRIVATE_GROQ_API_KEY
   if (!apiKey) return null
   const client = new Groq({ apiKey, timeout: 18000, maxRetries: 0 })
   const catalog = { surfaceIds: SURFACES, capabilityIds: CAPABILITIES, integrationIds: INTEGRATIONS, modifierIds: MODIFIERS }
