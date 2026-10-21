@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 // Callback requests are paused while email delivery is unavailable.
 // import QueryModal from './QueryModal'
 import DiscoveryProgress from './DiscoveryProgress'
@@ -131,7 +131,7 @@ export default function SolutionDiscovery({
   const [exporting, setExporting] = useState(false)
   const [planStep, setPlanStep] = useState<PlanStep>(0)
   const [reviewed, setReviewed] = useState<ReviewedFields>({})
-  const [summaryOpen, setSummaryOpen] = useState(false)
+  const [summaryOpen, setSummaryOpen] = useState(true)
   const [planOptionsOpen, setPlanOptionsOpen] = useState(false)
   const [recovery, setRecovery] = useState<{ mode: DiscoveryMode | null; invalid: boolean; token?: string } | null>(null)
   const [notice, setNotice] = useState('')
@@ -147,6 +147,8 @@ export default function SolutionDiscovery({
   const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const questionHeading = useRef<HTMLHeadingElement>(null)
   const questionScroll = useRef<HTMLDivElement>(null)
+  const navigationTools = useRef<HTMLDivElement>(null)
+  const revealQuestion = useRef(false)
   const sectionRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
@@ -289,7 +291,11 @@ export default function SolutionDiscovery({
   useEffect(() => {
     if (questionScroll.current) questionScroll.current.scrollTop = 0
     questionHeading.current?.focus({ preventScroll: true })
-  }, [view?.question?.id, view?.session.stage, view?.session.mode, planStep, revisitingQuestion])
+    if (revealQuestion.current && window.matchMedia?.('(max-width: 1023px)').matches) {
+      navigationTools.current?.scrollIntoView({ block: 'start', behavior: 'instant' })
+    }
+    revealQuestion.current = false
+  }, [view?.question?.id, view?.session.stage, view?.session.mode, view?.session.revision, planStep, revisitingQuestion])
 
   async function request(payload: Record<string, unknown>, expectedMode?: DiscoveryMode, local?: LocalDraft, options: { preserveEstimateOnRejection?: boolean } = {}): Promise<boolean> {
     if (locked.current) return false
@@ -313,6 +319,7 @@ export default function SolutionDiscovery({
       if (mode && data.session?.mode !== mode) throw new Error('The approach changed unexpectedly. Your current draft is still here; please retry.')
       // A correction changes the requirements. Preserve unsent text/navigation,
       // but never let the old local scope overwrite the recomputed server plan.
+      revealQuestion.current = true
       accept(data, payload.action === 'edit' && local ? { ...local, scope: data.session.scope, reviewed: {} } : local)
       return true
     } catch (failure) {
@@ -383,7 +390,7 @@ export default function SolutionDiscovery({
     setAllowPartial(false)
     setReviewed(previous => ({ ...previous, ...Object.fromEntries(Object.keys(preference).map(key => [key, true])) }))
   }
-  function goToStep(step: PlanStep) { setPlanStep(step); setApproved(false); setAllowPartial(false) }
+  function goToStep(step: PlanStep) { revealQuestion.current = true; setPlanStep(step); setApproved(false); setAllowPartial(false) }
   function nextPlanStep() {
     if (planStep === 0 && !scope.surfaceIds.length) return
     if (planStep === 1 && !scope.capabilityIds.length && !reviewed.capabilityIds) return
@@ -404,11 +411,11 @@ export default function SolutionDiscovery({
     }
     void request({ action: 'review' }, view.session.mode, local, { preserveEstimateOnRejection: true })
   }
-  const { issues, pricedScope } = reviewScope(scope)
-  const dependencyIssues = scopeDependencyIssues(scope)
+  const { issues, pricedScope } = useMemo(() => reviewScope(scope), [scope])
+  const dependencyIssues = useMemo(() => scopeDependencyIssues(scope), [scope])
   const session = view?.session
   const result = view?.result
-  const reviewItems = session ? discoveryReviewItems(session, scope) : []
+  const reviewItems = useMemo(() => session ? discoveryReviewItems(session, scope) : [], [session, scope])
   const showChoices = session?.mode === 'manual' && Object.keys(session.facts).length === 0
   const progressInput = { scope, reviewed, approved, allowPartial, planStep, hasResult: !!result }
   const progress = discoveryProgress(session ?? null, progressInput)
@@ -433,7 +440,7 @@ export default function SolutionDiscovery({
     setSelectedOptions(previous => previous.filter(value => value !== option))
     requestAnimationFrame(() => {
       const returned = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-answer-suggestion]')).find(button => button.dataset.answerSuggestion === option)
-      returned?.focus()
+      returned?.focus({ preventScroll: true })
     })
   }
   const currentQuestionIndex = view?.question ? QUESTIONS.findIndex(question => question.id === view.question?.id) : QUESTIONS.length
@@ -441,6 +448,7 @@ export default function SolutionDiscovery({
   const previousQuestion = session ? [...QUESTIONS.slice(0, Math.max(0, activeQuestionIndex))].reverse().find(question => session.facts[question.id]) : undefined
   function visitPreviousQuestion() {
     if (!previousQuestion || !session) return
+    revealQuestion.current = true
     setRevisitingQuestion(previousQuestion.id)
     setCorrection(customerAnswers(session).get(previousQuestion.id) ?? session.facts[previousQuestion.id]?.evidence ?? '')
   }
@@ -513,9 +521,16 @@ export default function SolutionDiscovery({
     {session && ready && !recovery && <DiscoveryProgress session={session} {...progressInput} />}
 
     {session && view && <>
-      <div className={styles.sessionTools}>
+      <div ref={navigationTools} className={styles.sessionTools}>
         <div className={styles.planToolbar}>
+          <div className={styles.approachNavigation}>
+            <nav className={styles.questionNavigation} aria-label="Question navigation">
+              <button type="button" className={styles.backArrow} disabled={busy || (session.stage === 'discovery' ? !previousQuestion : session.stage === 'review' ? planStep === 0 : !result)} aria-label={session.stage === 'discovery' ? 'Back to previous question' : session.stage === 'confirmed' ? 'Back to plan review' : 'Back to previous step'} onClick={() => session.stage === 'discovery' ? visitPreviousQuestion() : session.stage === 'confirmed' ? editSolution() : planStep > 0 ? goToStep((planStep - 1) as PlanStep) : undefined}>
+                {session.stage === 'discovery' ? <span aria-hidden="true">←</span> : <><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M20 12H4m6-6-6 6 6 6" /></svg><span className="sr-only">Back</span></>}
+              </button>
+            </nav>
           <p className="text-sm" aria-label="Current approach"><span className="text-[var(--muted)]">Current approach: </span><strong>{session.mode === 'guided' ? 'Guide me' : 'Build my own plan'}</strong></p>
+          </div>
           <button type="button" className={`${secondary} ${styles.planToggle}`} aria-expanded={planOptionsOpen} aria-controls="discovery-plan-options" onClick={() => setPlanOptionsOpen(open => !open)}>
             <span>{planOptionsOpen ? 'Close plan options' : 'Start a new plan'}</span>
             <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d={planOptionsOpen ? 'm6 15 6-6 6 6' : 'm6 9 6 6 6-6'} /></svg>
@@ -532,7 +547,7 @@ export default function SolutionDiscovery({
       <div className={`${styles.workspace} ${!showSummary ? styles.workspaceSingle : ''}`} data-guided-workspace={session.mode === 'guided'}>
         <div className={`${styles.glass} ${styles.questionPanel} space-y-4 min-w-0`} data-question-layout={session.stage === 'discovery'}>
           {session.stage === 'discovery' && <div ref={questionScroll} className={`${styles.questionScroll} space-y-4`} role="region" aria-label="Current question — scroll for more" tabIndex={0}>
-            {session.turns > 0 && <p className="text-sm text-[var(--muted)]">{customerWording(session.assistantMessage)}</p>}
+            {session.turns > 0 && <details open className={styles.answerRecap} key={`${session.revision}:${revisitingQuestion ?? 'current'}`}><summary>What AI understood</summary><p>{customerWording(session.assistantMessage)}</p></details>}
             {session.providerStatus === 'guided_fallback' && session.turns > 0 && <p role="status" className="text-sm text-[var(--muted)]">Your answers are saved. AI suggestions are unavailable right now, but you can keep going and review your choices.</p>}
             {revisitingQuestion && <form onSubmit={event => { event.preventDefault(); void saveRevisitedAnswer() }} className="space-y-4">
               <p className={styles.eyebrow}>EARLIER QUESTION</p>
@@ -546,19 +561,19 @@ export default function SolutionDiscovery({
               <p className="text-sm text-[var(--muted)]">Edit this answer, then continue forward. Your unsent answer on the current question is preserved.</p>
               <div className={styles.actions}>
                 <button type="submit" className={primary} disabled={busy || !correction.trim()}>{busy ? 'Saving…' : 'Save and continue'}</button>
-                <button type="button" className={secondary} disabled={busy} onClick={() => { setRevisitingQuestion(null); setCorrection('') }}>Return to current question</button>
+                <button type="button" className={secondary} disabled={busy} onClick={() => { revealQuestion.current = true; setRevisitingQuestion(null); setCorrection('') }}>Return to current question</button>
               </div>
             </form>}
             {!revisitingQuestion && view.question && <form onSubmit={event => { event.preventDefault(); if (!answerTooLong) void sendAnswer(composedAnswer) }} className="space-y-4">
               <div className={styles.questionHeader}>
                 <h2 ref={questionHeading} tabIndex={-1} className="text-xl font-semibold outline-none">{view.question.text}</h2>
               </div>
-              {view.question.options.length > 0 && <div className="space-y-2"><p className="text-sm font-medium">Suggestions — choose as many as apply</p><div className="flex flex-wrap gap-2">{view.question.options.filter(option => !selectedOptions.includes(option)).map(option => <button key={option} type="button" className={secondary} data-answer-suggestion={option} aria-pressed="false" disabled={busy} onClick={() => selectSuggestedOption(option)}>{option}</button>)}</div></div>}
               <label htmlFor="discovery-answer" className="block text-sm font-medium">Add any useful details</label>
               <div className={styles.answerComposer}>
-                {selectedOptions.length > 0 && <div className={styles.answerChips} aria-label="Selected answers">{selectedOptions.map(option => <span className={styles.answerChip} key={option}>{option}<button type="button" disabled={busy} aria-label={`Remove ${option}`} onClick={() => removeSuggestedOption(option)}>×</button></span>)}</div>}
+                {selectedOptions.length > 0 && <div className={styles.answerChips} aria-label="Selected answers">{selectedOptions.map(option => <span className={styles.answerChip} key={option}><span>{option}</span><button type="button" disabled={busy} aria-label={`Remove ${option}`} onClick={() => removeSuggestedOption(option)}>×</button></span>)}</div>}
                 <textarea id="discovery-answer" className={styles.composerInput} rows={4} maxLength={2000} value={answer} disabled={busy} onChange={event => setAnswer(event.target.value)} aria-describedby="discovery-answer-hint discovery-answer-limit" placeholder="A few sentences are enough." />
               </div>
+              {view.question.options.some(option => !selectedOptions.includes(option)) && <div className={styles.answerSuggestions}><p>Suggestions — choose as many as apply</p><div>{view.question.options.filter(option => !selectedOptions.includes(option)).map(option => <button key={option} type="button" className={secondary} data-answer-suggestion={option} aria-pressed="false" disabled={busy} onClick={() => selectSuggestedOption(option)}>{option}</button>)}</div></div>}
               <p id="discovery-answer-hint" className="text-sm text-[var(--muted)]">Add details if useful. Don’t include passwords or private customer records.</p>
               <p id="discovery-answer-limit" className={composedAnswer.length > 1600 || answerTooLong ? `text-xs ${answerTooLong ? 'text-[var(--error)]' : 'text-[var(--muted)]'}` : 'sr-only'}>{composedAnswer.length.toLocaleString('en-IN')} of 2,000 characters including selected answers.</p>
               <div className={styles.actions}>
@@ -567,7 +582,6 @@ export default function SolutionDiscovery({
             </form>}
           </div>}
 
-          {session.stage === 'discovery' && previousQuestion && <nav className={styles.questionNavigation} aria-label="Question navigation"><button type="button" className={styles.backArrow} disabled={busy} aria-label="Back to previous question" onClick={visitPreviousQuestion}><span aria-hidden="true">←</span></button></nav>}
           {session.stage === 'review' && <>
             {session.mode === 'guided' && session.recommendations.length > 0 && planStep === 0 && <section className={styles.aiPlan} aria-labelledby="ai-plan-title"><p className={styles.eyebrow}>AI-ASSISTED STARTING PLAN</p><h2 id="ai-plan-title" className="text-xl font-bold">Recommended from your business answers</h2><p className="text-sm text-[var(--muted)]">These suggestions are selected as a starting point—not a final decision. Review the reasons, remove anything you do not need, and add anything the AI missed.</p><ul className="space-y-3">{session.recommendations.map(item => {
               const choices = { surfaceIds: SURFACE_CHOICES, capabilityIds: CAPABILITY_CHOICES, integrationIds: INTEGRATION_CHOICES, modifierIds: MODIFIER_CHOICES }[item.group] as Record<string, { name: string }>
@@ -623,7 +637,6 @@ export default function SolutionDiscovery({
             <p className="text-sm text-[var(--muted)]">If Standard planning and “Some details to discuss” suit you, keep them. They will be included as your choices when you continue.</p>
             </>}
             {planStep < 3 && <div className={styles.actions}>
-              {planStep > 0 && <button className={secondary} disabled={busy} onClick={() => goToStep((planStep - 1) as PlanStep)}>Back</button>}
               <button className={primary} disabled={busy || (planStep === 0 && !scope.surfaceIds.length) || (planStep === 1 && ((!scope.capabilityIds.length && !reviewed.capabilityIds) || issues.length > 0)) || (planStep === 2 && (dependencyIssues.length > 0 || (scope.capabilityIds.includes('payments') && scope.billing === 'undecided')))} onClick={nextPlanStep}>{planStep === 2 ? 'Review these details' : planStep === 1 ? 'Continue to details' : 'Continue to features'}</button>
             </div>}
             {planStep === 3 && <>
@@ -681,12 +694,11 @@ export default function SolutionDiscovery({
           </>}
         </div>
 
-        {showSummary && <aside className={`${styles.glass} ${styles.summary} min-w-0`} aria-label="Requirements understood so far">
-          <div className={`${styles.summaryHeader} space-y-2`}>
-            <div className="flex items-center justify-between gap-3"><h2 className="font-semibold">{showChoices ? 'Your selected plan' : 'What I’ve understood'}</h2><span className={styles.badge}>{showChoices ? `${selectedChoices.length} selected` : `${Object.keys(session.facts).length} of ${QUESTIONS.length}`}</span></div>
-            <p className="text-sm text-[var(--muted)]">{showChoices ? session.stage === 'confirmed' ? 'Your reviewed choices. Unanswered details stay separate.' : 'Draft choices—not confirmed until you approve.' : 'Your answers so far. Change anything that doesn’t sound right.'}</p>
+        {showSummary && <aside className={`${styles.glass} ${styles.summary} min-w-0`} data-expanded={summaryOpen} aria-label="Requirements understood so far">
+          <div className={styles.summaryHeader}>
+            <h2 className="font-semibold"><button className={`${styles.summaryToggle} ${secondary}`} aria-expanded={summaryOpen} aria-controls="discovery-summary-body" onClick={() => setSummaryOpen(previous => !previous)}><span>{showChoices ? 'Your selected plan' : 'What I’ve understood'} ({showChoices ? `${summaryCount} selected` : `${summaryCount} of ${QUESTIONS.length}`})</span><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d={summaryOpen ? 'm6 15 6-6 6 6' : 'm6 9 6 6 6-6'} /></svg></button></h2>
+            {summaryOpen && <p className="text-sm text-[var(--muted)]">{showChoices ? session.stage === 'confirmed' ? 'Your reviewed choices. Unanswered details stay separate.' : 'Draft choices—not confirmed until you approve.' : 'Your answers so far. Change anything that doesn’t sound right.'}</p>}
           </div>
-          <button className={`${styles.summaryToggle} ${secondary}`} aria-expanded={summaryOpen} aria-controls="discovery-summary-body" onClick={() => setSummaryOpen(previous => !previous)}>{summaryOpen ? 'Hide' : 'View'} {showChoices ? 'your selected plan' : 'your answers'} ({showChoices ? selectedChoices.length : Object.keys(session.facts).length})</button>
           <div id="discovery-summary-body" className={styles.summaryBody} data-expanded={summaryOpen}>
           <div className={`${styles.summaryScroll} p-5 space-y-4`} role="region" aria-label={showChoices ? 'Your selected choices — scroll to review' : 'Your answers — scroll to review'} tabIndex={(showChoices ? selectedChoices.length : Object.keys(session.facts).length) > 0 ? 0 : undefined}>
           {showChoices && (selectedChoices.length > 0
@@ -710,7 +722,7 @@ export default function SolutionDiscovery({
           })}
           </div>
           </div>
-          <p className={styles.summaryFooter}><strong className="block mb-1">Next step</strong>{progress.next}</p>
+          {summaryOpen && <p className={styles.summaryFooter}><strong className="block mb-1">Next step</strong>{progress.next}</p>}
         </aside>}
       </div>
       {/* Callback dialog retained while email delivery is paused.
