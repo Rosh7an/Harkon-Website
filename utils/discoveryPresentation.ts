@@ -44,7 +44,7 @@ export function customerWording(text: string): string {
     'Existing systems and constraints still needs confirmation.': 'Confirm any tools, existing data or special needs.',
   }
   if (Object.hasOwn(missingDetails, text)) return missingDetails[text]
-  if (text.startsWith('AI scope mapping was unavailable.')) return 'Our assistant could not check your answers. The team needs to review them before we can estimate the whole project.'
+  if (text.startsWith('AI scope mapping was unavailable.')) return 'AI review is unavailable right now. A consultant can check the full plan.'
   if (text.startsWith('Data migration, regulated data,')) return 'Moving old data, handling sensitive information or connecting complex older systems needs a discussion with the team.'
   let result = text
   for (const [catalog, choices] of catalogPairs) {

@@ -54,7 +54,7 @@ export function discoveryProgress(session: DiscoverySession | null, input: Progr
       : session.mode === 'guided' ? `${topics} of ${QUESTIONS.length} topics covered${uncertain ? ` · ${uncertain} still ${uncertain === 1 ? 'needs' : 'need'} clarification` : ''}${session.stage !== 'discovery' ? ' · Review missing details and assumptions.' : ''}`
         : 'Progress follows choices and reviewed details, not the number of features selected.'
   const next = !session ? 'Choose how you want to build your plan.'
-    : done ? 'Request a proposal or edit your plan.'
+    : done ? 'Call or WhatsApp a consultant, or edit your plan.'
       : session.stage === 'discovery' ? 'Answer the next question, or choose “I’m not sure”.'
         : input.planStep === 3 ? 'Review exclusions, approve your plan and request an estimate.'
           : input.planStep === 2 ? 'Review connections, applicable details and planning assumptions.'

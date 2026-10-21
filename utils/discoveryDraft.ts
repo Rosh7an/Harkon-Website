@@ -15,6 +15,7 @@ export interface LocalDraft {
   expiresAt: number
   scope: SolutionScope
   answer: string
+  selectedOptions: string[]
   editing: FactId | null
   correction: string
   planStep: PlanStep
@@ -39,12 +40,13 @@ export function readDraftStore(raw: string | null, now = Date.now()): DraftStore
     for (const mode of ['guided', 'manual'] as const) {
       const entry = Object.hasOwn(value.drafts, mode) ? value.drafts[mode] : null
       if (!isRecord(entry) || typeof entry.token !== 'string' || (!entry.token && entry.needsRestart !== true) || entry.token.length > 430000 || typeof entry.expiresAt !== 'number' || !Number.isFinite(entry.expiresAt) || entry.expiresAt <= now) continue
-      if (typeof entry.answer !== 'string' || entry.answer.length > 2000 || typeof entry.correction !== 'string' || entry.correction.length > 2000 || !Number.isInteger(entry.planStep) || ![0, 1, 2, 3].includes(entry.planStep as number) || !isRecord(entry.reviewed)) continue
+      const selectedOptions = entry.selectedOptions === undefined ? [] : entry.selectedOptions
+      if (typeof entry.answer !== 'string' || entry.answer.length > 2000 || !Array.isArray(selectedOptions) || selectedOptions.length > 8 || selectedOptions.some(option => typeof option !== 'string' || !option.trim() || option.length > 200) || new Set(selectedOptions).size !== selectedOptions.length || typeof entry.correction !== 'string' || entry.correction.length > 2000 || !Number.isInteger(entry.planStep) || ![0, 1, 2, 3].includes(entry.planStep as number) || !isRecord(entry.reviewed)) continue
       if (entry.editing !== null && !isFactId(entry.editing)) continue
       try {
         const reviewed: ReviewedFields = {}
         for (const field of REVIEW_FIELDS) if (Object.hasOwn(entry.reviewed, field) && entry.reviewed[field] === true) reviewed[field] = true
-        drafts[mode] = { token: entry.needsRestart === true ? '' : entry.token, expiresAt: entry.expiresAt, scope: parseScope(entry.scope), answer: entry.answer, correction: entry.correction, editing: entry.editing as FactId | null, planStep: entry.planStep as PlanStep, reviewed, ...(entry.needsRestart === true ? { needsRestart: true as const } : {}) }
+        drafts[mode] = { token: entry.needsRestart === true ? '' : entry.token, expiresAt: entry.expiresAt, scope: parseScope(entry.scope), answer: entry.answer, selectedOptions: [...selectedOptions], correction: entry.correction, editing: entry.editing as FactId | null, planStep: entry.planStep as PlanStep, reviewed, ...(entry.needsRestart === true ? { needsRestart: true as const } : {}) }
       } catch { /* A corrupt draft must not prevent recovery of the other approach. */ }
     }
     return { version: 2, activeMode: value.activeMode as DiscoveryMode, drafts }
