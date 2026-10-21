@@ -3,8 +3,8 @@ import { SURFACES, type SurfaceId } from './solutionCatalog'
 
 type Intent = { id: SurfaceId; decision: 'include' | 'exclude' | 'clarify'; evidence: string }
 type Questions = readonly { id: FactId; text: string }[]
-const mentions = /\b(websites?|web sites?|mobile[- ](?:apps?|applications?)|(?:android|iphone|ios) apps?|(?:web|browser) (?:apps?|workspaces?)|portals?|(?:admin|management) (?:dashboards?|consoles?))\b/gi
-const wants = /\b(?:need|want|require|build|create|develop|looking for|like to have|should have|will use)\b/i
+const mentions = /\b(websites?|web sites?|mobile[- ](?:apps?|applications?)|(?:android|iphone|ios) apps?|(?:web|browser) (?:apps?|workspaces?)|portals?|(?:internal|staff|team) management systems?|(?:admin|management) (?:dashboards?|consoles?))\b/gi
+const wants = /\b(?:needs?|wants?|requires?|build|create|develop|looking for|like to have|should have|will use)\b/i
 const negation = /\b(?:do not|don['’]t|not|no|without)\b/i
 
 // This is deliberately a narrow English request matcher, not an NLP replacement.
@@ -18,7 +18,7 @@ function parseIntents(text: string, field: FactId | undefined): Intent[] {
     const found = [...clause.matchAll(mentions)]
     for (const match of found) {
       const prefix = clause.slice(previousEnd, match.index)
-      const id: SurfaceId = /^web ?site/i.test(match[0]) ? 'website' : /^(?:mobile|android|iphone|ios)/i.test(match[0]) ? 'mobile' : /^(?:admin|management)/i.test(match[0]) ? 'admin' : 'portal'
+      const id: SurfaceId = /^web ?site/i.test(match[0]) ? 'website' : /^(?:mobile|android|iphone|ios)/i.test(match[0]) ? 'mobile' : /^(?:admin|management|internal|staff|team)/i.test(match[0]) ? 'admin' : 'portal'
       const decision = unclear ? 'clarify' : negation.test(prefix.replace(/not only/gi, '')) ? 'exclude' : wants.test(prefix) ? 'include' : inherited ?? (field === 'users' && !/\b(?:already|currently|existing|today)\b/i.test(clause) ? 'include' : undefined)
       previousEnd = match.index! + match[0].length
       if (!decision) continue
@@ -48,13 +48,15 @@ export function requestedSurfaceIntents(session: DiscoverySession, questions: Qu
       if (question) field = question.id
     } else {
       if (field) seen.add(field)
-      if (!field || session.facts[field]?.source !== 'edit') apply(message.text, field)
+      if (!field || (session.facts[field]?.source !== 'edit' && !session.answers?.[field])) apply(message.text, field)
     }
   }
   for (const question of questions) {
     const fact = session.facts[question.id]
     const evidenceAlreadyRead = fact && session.messages.some(message => message.role === 'user' && message.text.includes(fact.evidence))
-    if (fact && (fact.source === 'edit' || (!seen.has(question.id) && !evidenceAlreadyRead))) apply(fact.source === 'edit' ? fact.value : fact.evidence, question.id)
+    const saved = session.answers?.[question.id]
+    if (saved) apply(saved, question.id)
+    else if (fact && (fact.source === 'edit' || (!seen.has(question.id) && !evidenceAlreadyRead))) apply(fact.source === 'edit' ? fact.value : fact.evidence, question.id)
   }
   return [...decisions.values()]
 }
@@ -69,7 +71,8 @@ export function reconcileRequestedSurfaces(session: DiscoverySession, questions:
     evidence: intent.evidence,
   }))
   const recommendations = [...session.recommendations.filter(item => item.group !== 'surfaceIds' || !decided.has(item.id as SurfaceId)), ...requested]
-  return { ...session, recommendations, scope: { ...session.scope, surfaceIds: recommendations.filter(item => item.group === 'surfaceIds').map(item => item.id as SurfaceId) } }
+  const customerSelected = session.scope.surfaceIds.filter(id => !decided.has(id) && !session.recommendations.some(item => item.group === 'surfaceIds' && item.id === id))
+  return { ...session, recommendations, scope: { ...session.scope, surfaceIds: [...new Set([...customerSelected, ...recommendations.filter(item => item.group === 'surfaceIds').map(item => item.id as SurfaceId)])] } }
 }
 
 export function surfaceClarifications(session: DiscoverySession, questions: Questions): string[] {

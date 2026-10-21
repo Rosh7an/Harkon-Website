@@ -62,6 +62,13 @@ export function clearInactiveAnswers(scope: SolutionScope): SolutionScope {
   return { ...scope, billing: scope.capabilityIds.includes('payments') ? scope.billing : 'undecided', crmProvider: scope.integrationIds.includes('existing_crm') ? scope.crmProvider : 'undecided' }
 }
 export class SolutionValidationError extends Error {}
+export interface ScopeDependencyIssue {
+  group: 'capabilityIds' | 'modifierIds'
+  itemId: CapabilityId | ModifierId
+  itemName: string
+  message: string
+  compatibleSurfaceIds: SurfaceId[]
+}
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
@@ -86,13 +93,28 @@ export function parseScope(value: unknown): SolutionScope {
   if (!isRiskProfile(value.riskProfile) || !isTimelineSpeed(value.timelineSpeed)) throw new SolutionValidationError('Select valid risk and delivery preferences.')
   return clearInactiveAnswers({ surfaceIds, capabilityIds, integrationIds, modifierIds, billing: value.billing as SolutionScope['billing'], crmProvider: value.crmProvider as SolutionScope['crmProvider'], riskProfile: value.riskProfile, timelineSpeed: value.timelineSpeed })
 }
+export function scopeDependencyIssues(scope: SolutionScope): ScopeDependencyIssue[] {
+  const issues: ScopeDependencyIssue[] = []
+  for (const id of [...scope.capabilityIds, ...scope.modifierIds]) {
+    const definition = Object.hasOwn(CAPABILITIES, id) ? CAPABILITIES[id as CapabilityId] : MODIFIERS[id as ModifierId]
+    if (definition.surfaces && !definition.surfaces.some(surface => scope.surfaceIds.includes(surface))) {
+      const selected = scope.surfaceIds.map(surface => SURFACES[surface].name.toLowerCase()).join(' or ') || 'the current selection'
+      const required = definition.surfaces.map(surface => SURFACES[surface].name.toLowerCase()).join(', ').replace(/, ([^,]*)$/, ' or $1')
+      issues.push({
+        group: Object.hasOwn(CAPABILITIES, id) ? 'capabilityIds' : 'modifierIds',
+        itemId: id as CapabilityId | ModifierId,
+        itemName: definition.name,
+        message: `${definition.name} cannot be provided through ${selected} alone. Add ${required}, or remove this feature.`,
+        compatibleSurfaceIds: [...definition.surfaces],
+      })
+    }
+  }
+  return issues
+}
 export function reviewScope(scope: SolutionScope) {
   const issues: string[] = []
   if (!scope.surfaceIds.length) issues.push('Select at least one place where people will use the solution.')
-  for (const id of [...scope.capabilityIds, ...scope.modifierIds]) {
-    const definition = Object.hasOwn(CAPABILITIES, id) ? CAPABILITIES[id as CapabilityId] : MODIFIERS[id as ModifierId]
-    if (definition.surfaces && !definition.surfaces.some(surface => scope.surfaceIds.includes(surface))) issues.push(`${definition.name} needs ${definition.surfaces.map(surface => SURFACES[surface].name).join(' or ')}.`)
-  }
+  issues.push(...scopeDependencyIssues(scope).map(issue => issue.message))
   if (scope.capabilityIds.includes('payments') && !scope.surfaceIds.some(id => id !== 'admin')) issues.push('Payments need a website, portal or mobile checkout interface.')
   const paymentUnknown = scope.capabilityIds.includes('payments') && scope.billing === 'undecided'
   const crmUnknown = scope.integrationIds.includes('existing_crm') && scope.crmProvider === 'undecided'
