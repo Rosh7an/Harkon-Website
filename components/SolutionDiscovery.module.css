@@ -98,13 +98,21 @@
 }
 .intro .modeHint { font-size: .8125rem; }
 .workspace { --planner-panel-height: clamp(32rem, calc(100svh - 13rem), 40rem); display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 1.25rem; align-items: start; overflow-anchor: none; }
-.questionPanel { position: relative; height: var(--planner-panel-height); overflow-y: auto; overscroll-behavior-y: contain; scrollbar-gutter: stable; padding: 1.75rem; }
-.questionPanel[data-question-layout='true'] { padding-inline-start: 4rem; }
-.questionPanel[data-question-layout='true'] { height: var(--planner-panel-height); overflow: hidden; }
-.questionScroll { height: 100%; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-gutter: stable; scrollbar-width: thin; padding: .25rem; }
+.questionPanel { position: relative; height: var(--planner-panel-height); overflow-y: auto; overscroll-behavior-y: auto; scrollbar-gutter: stable; scrollbar-width: thin; padding: 1.75rem; scroll-margin-top: 6rem; }
+.questionPanel[data-question-layout='true'] { display: flex; flex-direction: column; height: var(--planner-panel-height); overflow: clip; }
+.questionScroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior-y: auto; scrollbar-gutter: stable; scrollbar-width: thin; padding: .25rem; }
+.questionPanel > .questionScroll { margin-top: 0; }
 .questionScroll:focus-visible { outline-offset: -3px; }
 .questionScroll .actions { position: sticky; bottom: -.25rem; z-index: 2; margin-inline: -.25rem; padding: .85rem .25rem .25rem; background: var(--panel); border-top: 1px solid var(--border); }
-.questionPanel .questionNavigation { position: absolute; top: .75rem; left: .5rem; margin: 0; }
+.approachNavigation { display: flex; align-items: center; gap: .5rem; min-width: 0; }
+.questionNavigation { flex: 0 0 auto; margin: 0; }
+.answerRecap { color: var(--muted); font-size: .8125rem; }
+.answerRecap summary { min-height: 44px; align-content: center; cursor: pointer; }
+.answerRecap p { padding-block: .5rem; }
+.answerSuggestions { font-size: .875rem; }
+.answerSuggestions > p { margin-bottom: .5rem; color: var(--muted); }
+.answerSuggestions > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: 1fr; gap: .5rem; }
+.answerSuggestions button { width: 100%; min-width: 0; min-height: 44px; text-align: left; }
 .questionHeader { display: block; }
 .questionHeader h2 { min-width: 0; margin: 0; }
 .backArrow { display: inline-flex; align-items: center; justify-content: center; width: 2.75rem; height: 2.75rem; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--text); line-height: 1; }
@@ -112,14 +120,15 @@
 .backArrow:not(:disabled):hover { background: var(--surface); }
 .backArrow:disabled { opacity: .5; cursor: default; }
 .selectedOption { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--input-fill)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent); }
-.answerComposer { display: flex; flex-direction: column; gap: .75rem; height: 11rem; min-height: 0; padding: 1rem; border: 1px solid var(--border-hi); border-radius: 1rem; background: var(--input-fill); }
+.answerComposer { display: flex; flex-direction: column; gap: .75rem; min-height: 6rem; padding: .75rem; border: 1px solid var(--border-hi); border-radius: 1rem; background: var(--input-fill); }
 .answerComposer:has(.composerInput:focus-visible) { border-color: var(--accent-text); outline: 2px solid var(--accent-text); outline-offset: -2px; }
-.answerComposer .composerInput { display: block; flex: 1 1 4rem; width: 100%; min-width: 0; min-height: 3rem; overflow-y: auto; overscroll-behavior-y: contain; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--text); font: inherit; font-size: 1rem; line-height: 1.6; resize: none; box-shadow: none; }
+.answerComposer .composerInput { display: block; flex: none; width: 100%; height: 4.5rem; min-width: 0; min-height: 3rem; overflow-y: auto; overscroll-behavior-y: auto; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--text); font: inherit; font-size: 1rem; line-height: 1.6; resize: none; box-shadow: none; }
 .experience .answerComposer .composerInput:focus-visible { outline: none; }
 .composerInput::placeholder { color: var(--muted); opacity: 1; }
-.answerChips { display: flex; flex: 0 1 auto; flex-wrap: wrap; gap: .5rem; min-height: 0; max-height: 5rem; overflow-y: auto; overscroll-behavior-y: contain; }
-.answerChip { display: inline-flex; align-items: center; gap: .45rem; max-width: 100%; padding: .45rem .55rem .45rem .75rem; border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--border)); border-radius: 999px; background: color-mix(in srgb, var(--accent) 12%, var(--panel)); font-size: .875rem; overflow-wrap: anywhere; }
-.answerChip button { display: inline-grid; place-items: center; flex: 0 0 2.75rem; width: 2.75rem; height: 2.75rem; margin: -.35rem -.35rem -.35rem 0; border-radius: 999px; color: var(--text); font-size: 1.15rem; line-height: 1; }
+.answerChips { display: grid; flex: none; grid-template-columns: minmax(0, 1fr); grid-auto-rows: 1fr; gap: .5rem; }
+.answerChip { display: flex; align-items: center; gap: .5rem; width: 100%; min-width: 0; min-height: 44px; padding-left: .65rem; border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--border)); border-radius: .65rem; background: color-mix(in srgb, var(--accent) 12%, var(--panel)); font-size: .875rem; line-height: 1.4; overflow-wrap: anywhere; }
+.answerChip > span { flex: 1; min-width: 0; padding-block: .35rem; }
+.answerChip button { display: inline-grid; place-items: center; flex: 0 0 2.75rem; width: 2.75rem; height: 2.75rem; border-radius: .65rem; color: var(--text); font-size: 1.15rem; line-height: 1; }
 .answerChip button:not(:disabled):hover { background: color-mix(in srgb, var(--accent) 22%, transparent); }
 .aiOverlay { position: absolute; inset: 0; z-index: 10; border-radius: inherit; background: color-mix(in srgb, var(--bg) 76%, transparent); cursor: progress; }
 /* Blur only the backdrop: a filtered ancestor would trap the fixed status panel. */
@@ -158,14 +167,14 @@
 .paymentChoices small { color: var(--warning-text); line-height: 1.45; }
 @keyframes ai-orbit { to { transform: rotate(360deg); } }
 @keyframes ai-breathe { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
-.sessionTools { margin: 0 0 1rem; }
+.sessionTools { margin: 0 0 1rem; scroll-margin-top: 6rem; }
 .planToolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; }
 .planToggle { display: inline-flex; align-items: center; justify-content: space-between; gap: .75rem; min-width: 12rem; min-height: 44px; margin-left: auto; font-size: .875rem; }
 .planToggle svg { flex-shrink: 0; }
 .planOptions { display: grid; gap: .75rem; margin-top: .75rem; padding: 1rem; border: 1px solid var(--border); border-radius: 1rem; background: var(--surface); }
 .glass { background: var(--panel); border: 1px solid var(--border-hi); border-radius: 1.4rem; box-shadow: var(--glass-shadow), inset 0 1px 0 rgba(255, 255, 255, .18); }
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .glass { background: linear-gradient(135deg, rgba(255, 255, 255, .055), transparent 70%), var(--glass-fill); -webkit-backdrop-filter: blur(22px); backdrop-filter: blur(22px); }
+  .glass { background: linear-gradient(135deg, rgba(255, 255, 255, .055), transparent 70%), var(--panel); }
 }
 .experience button, .experience summary, .experience input { touch-action: manipulation; }
 .experience button:not(:disabled), .experience summary { cursor: pointer; }
@@ -194,18 +203,22 @@
 .stepNumber { display: grid; place-items: center; flex-shrink: 0; width: 1.4rem; height: 1.4rem; border: 1px solid var(--border-hi); border-radius: 50%; font-size: .6875rem; }
 .currentStep .stepNumber { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .summary { position: relative; display: flex; flex-direction: column; height: var(--planner-panel-height); overflow: hidden; }
+.summary[data-expanded='false'] { height: auto; }
 .summaryHeader, .summaryFooter { flex: 0 0 auto; }
 .summaryBody { display: flex; flex: 1; flex-direction: column; min-height: 0; }
+.summaryBody[data-expanded='false'] { display: none; }
 .summary textarea { max-height: 10rem; overflow-y: auto; resize: none; }
 .workspaceSingle { grid-template-columns: minmax(0, 1fr); }
-.summaryScroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-gutter: stable; scrollbar-width: thin; scrollbar-color: var(--muted2) transparent; overflow-wrap: anywhere; }
+.summaryScroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior-y: auto; scrollbar-gutter: stable; scrollbar-width: thin; scrollbar-color: var(--muted2) transparent; overflow-wrap: anywhere; }
 .summaryScroll::-webkit-scrollbar { width: 7px; }
 .summaryScroll::-webkit-scrollbar-thumb { background: var(--muted2); border-radius: 999px; }
 .summaryScroll:focus-visible { outline-offset: -3px; }
-.summaryHeader { padding: 1rem; border-bottom: 1px solid var(--border); }
+.summaryHeader { border-bottom: 1px solid var(--border); }
+.summaryHeader > p { padding: 0 1rem 1rem; }
 .summaryFooter { padding: 1rem 1.25rem; border-top: 1px solid var(--border); font-size: .8125rem; line-height: 1.6; color: var(--muted); }
 .summaryFooter strong { color: var(--text); }
-.summaryToggle { display: none; }
+.summaryToggle { display: flex; align-items: center; justify-content: space-between; gap: .75rem; width: 100%; min-height: 44px; padding: 1rem; text-align: left; border: 0; border-radius: 0; }
+.summaryToggle svg { flex-shrink: 0; }
 .badge { flex-shrink: 0; padding: .25rem .55rem; border: 1px solid var(--border-hi); border-radius: 999px; font-size: .75rem; color: var(--muted); }
 .disclosure { padding: 1rem; border-radius: 1rem; border: 1px solid var(--border-hi); background: var(--surface); }
 .disclosure > summary { min-height: 2.75rem; display: list-item; align-content: center; font-weight: 600; }
@@ -232,34 +245,47 @@
 .contactLink:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 4px; }
 .experience p, .experience li, .experience h1, .experience h2, .experience h3 { overflow-wrap: anywhere; }
 .experience h2 { text-wrap: balance; }
+.experience fieldset { min-inline-size: 0; }
+.experience legend { max-width: 100%; white-space: normal; }
+.experience :is(input, textarea, select) { max-width: 100%; }
+.experience :is(button, label, select) { overflow-wrap: anywhere; }
+.experience button svg { flex-shrink: 0; }
 @media (max-width: 1240px) { .experience { padding: 1.75rem; } }
 @media (max-width: 1023px) {
   .workspace { grid-template-columns: minmax(0, 1fr); }
   .summary { position: static; height: auto; }
-  .summaryHeader { display: none; }
-  .summaryToggle { display: block; width: 100%; text-align: left; border: 0; border-radius: 0; }
-  .summaryBody[data-expanded='false'] { display: none; }
-  .summaryBody[data-expanded='true'] { flex: none; height: 22rem; }
+  .summaryBody[data-expanded='true'] { flex: none; height: clamp(12rem, 45svh, 24rem); }
   .questionPanel { padding: 1.5rem; }
+  .questionPanel, .questionPanel[data-question-layout='true'] { height: auto; overflow: visible; }
+  .questionScroll { flex: none; overflow: visible; }
+  .actions, .questionScroll .actions { position: static; margin: .75rem 0 0; padding: .75rem 0 max(.25rem, env(safe-area-inset-bottom)); background: transparent; border-top: 1px solid var(--border); border-radius: 0; }
 }
 @media (max-width: 640px) {
-  .plannerSection { padding-inline: 16px; }
+  .plannerSection { padding-inline: 12px; }
   .sectionHeading { margin-bottom: 32px; }
-  .experience { margin: 0; padding: 1rem; border-radius: 1.5rem; }
+  .experience { margin: 0; padding: .75rem; border-radius: 1.5rem; }
   .intro { text-align: left; }
   .intro :is(h1, h2) { max-width: 19rem; }
   .experience[data-active='true'] .intro :is(h1, h2) { font-size: 1.25rem; }
-  .modeBar { display: flex; justify-content: center; width: 100%; }
+  .modeBar { display: grid; grid-template-columns: minmax(0, 1fr); width: 100%; }
   .modeBar button { padding-inline: .75rem; font-size: .875rem; }
-  .questionPanel { padding: 1rem; }
+  .questionPanel { padding: .75rem; }
+  .answerComposer { padding: .75rem; }
+  .planToolbar { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .planToggle { width: 100%; min-width: 0; margin-left: 0; }
   .glass { border-radius: 1.1rem; }
   .progressPanel { padding: 1rem; }
   .step { flex-direction: column; align-items: start; font-size: .75rem; }
-  .actions { position: sticky; bottom: 0; z-index: 2; margin: 0 -1rem -1rem; padding: .85rem 1rem max(.85rem, env(safe-area-inset-bottom)); background: var(--panel); border-top: 1px solid var(--border); border-radius: 0 0 1rem 1rem; }
+  .questionHeader h2 { font-size: 1.125rem; line-height: 1.45; text-wrap: pretty; }
+  .questionScroll > :not(:first-child), .questionScroll form > :not(:first-child) { margin-top: .75rem; }
+  .answerSuggestions > div { grid-template-columns: minmax(0, 1fr); }
+  .answerSuggestions button { padding: .5rem .75rem; font-size: .8125rem; line-height: 1.4; }
   .actions button { flex: 1 1 auto; padding-inline: .85rem; }
   .reviewRows > div { flex-direction: column; }
   .contactActions > * { flex: 1 1 auto; }
   .paymentChoices { grid-template-columns: minmax(0, 1fr); }
+  .warningActions > * { flex: 1 1 100%; }
 }
+@media (max-height: 500px) { .workspace { --planner-panel-height: clamp(20rem, calc(100svh - 8rem), 26rem); } }
 @media (prefers-reduced-transparency: reduce) { .glass, .aiOverlay { background: var(--panel); -webkit-backdrop-filter: none; backdrop-filter: none; } .aiOverlay::before { -webkit-backdrop-filter: none; backdrop-filter: none; } }
 @media (prefers-reduced-motion: reduce) { .plannerSection, .plannerSection *, .experience *::before, .experience *::after { transition: none !important; animation: none !important; scroll-behavior: auto; opacity: 1 !important; transform: none !important; } }
