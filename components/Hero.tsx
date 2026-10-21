@@ -1,8 +1,6 @@
 'use client'
 
-import { useRef, useEffect, useState } from 'react'
-
-const WORDS = ['digital edge', 'your vision', 'smart tools', 'growth systems', 'mobile apps']
+import { useRef, useEffect } from 'react'
 
 const HERO_STATS = [
   { num: '4+',    label: 'Years of experience'        },
@@ -13,7 +11,6 @@ const HERO_STATS = [
 
 export default function Hero() {
   const canvasRef   = useRef<HTMLCanvasElement>(null)
-  const [typedWord, setTypedWord] = useState('')
 
   /* ── Canvas particles ── */
   useEffect(() => {
@@ -63,26 +60,6 @@ export default function Hero() {
     return () => { window.removeEventListener('resize', onResize); cancelAnimationFrame(rafId) }
   }, [])
 
-  /* ── Typewriter ── */
-  useEffect(() => {
-    let wi = 0, ci = 0, del = false
-    let t: ReturnType<typeof setTimeout>
-
-    const tick = () => {
-      const w = WORDS[wi]
-      if (!del) {
-        setTypedWord(w.slice(0, ci + 1)); ci++
-        if (ci === w.length) { del = true; t = setTimeout(tick, 2200); return }
-      } else {
-        setTypedWord(w.slice(0, ci - 1)); ci--
-        if (ci === 0) { del = false; wi = (wi + 1) % WORDS.length }
-      }
-      t = setTimeout(tick, del ? 52 : 95)
-    }
-    t = setTimeout(tick, 1800)
-    return () => clearTimeout(t)
-  }, [])
-
   const scrollTo = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 
   return (
@@ -109,7 +86,7 @@ export default function Hero() {
       {/* Content — fills available height above stats, centers vertically */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', position: 'relative', zIndex: 3, padding: '0 20px', minHeight: 0 }}>
       <div
-        style={{ textAlign: 'center', maxWidth: 960, width: '100%', animation: 'fadeUp .9s ease both' }}
+        style={{ textAlign: 'center', maxWidth: 960, width: '100%' }}
       >
         {/* Badge */}
         <div className="hidden sm:inline-flex" style={{ alignItems: 'center', gap: 8, border: '1px solid rgba(216,90,48,.25)', background: 'rgba(216,90,48,.06)', color: 'var(--accent)', fontSize: 10, fontWeight: 500, letterSpacing: '0.14em', textTransform: 'uppercase', padding: '7px 16px', borderRadius: 3, marginBottom: 28 }}>
@@ -122,8 +99,7 @@ export default function Hero() {
           style={{ fontSize: 'clamp(44px,9vw,108px)', fontWeight: 400, lineHeight: .92, letterSpacing: '-0.05em', marginBottom: 24, color: 'var(--text)' }}
         >
           We build the<br />
-          <span style={{ color: 'var(--accent)' }}>{typedWord}</span>
-          <span className="type-cursor" />
+          <span style={{ color: 'var(--accent)' }}>digital edge</span>
           <br />you deserve
         </h1>
 

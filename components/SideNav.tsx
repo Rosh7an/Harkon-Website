@@ -8,7 +8,10 @@ export default function SideNav() {
   const [active, setActive] = useState(0)
 
   useEffect(() => {
-    const handleScroll = () => {
+    const sections = SECTIONS.map(id => document.getElementById(id))
+    let frame: number | null = null
+    const updateActive = () => {
+      frame = null
       if (window.scrollY < 100) {
         setActive(0)
         return
@@ -16,7 +19,7 @@ export default function SideNav() {
       
       let currentIdx = 0
       for (let i = 0; i < SECTIONS.length; i++) {
-        const el = document.getElementById(SECTIONS[i])
+        const el = sections[i]
         if (el) {
           const rect = el.getBoundingClientRect()
           // If the top of the section is above the middle-ish of the viewport
@@ -27,11 +30,17 @@ export default function SideNav() {
       }
       setActive(currentIdx)
     }
-
+    const handleScroll = () => {
+      if (frame === null) frame = requestAnimationFrame(updateActive)
+    }
     window.addEventListener('scroll', handleScroll, { passive: true })
     // Run once on mount after layout
-    setTimeout(handleScroll, 100)
-    return () => window.removeEventListener('scroll', handleScroll)
+    const timer = setTimeout(handleScroll, 100)
+    return () => {
+      window.removeEventListener('scroll', handleScroll)
+      clearTimeout(timer)
+      if (frame !== null) cancelAnimationFrame(frame)
+    }
   }, [])
 
   const scrollTo = (id: string) => {

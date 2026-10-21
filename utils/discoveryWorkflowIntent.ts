@@ -3,26 +3,28 @@ import type { Recommendation } from './discovery'
 export interface WorkflowAnswer { field: string; text: string }
 type Decision = { include: boolean; evidence: string }
 const bookingReason = 'You described customers booking slots or appointments. Include booking and scheduling in the draft plan.'
+const paymentsReason = 'You described customers needing to pay. Include payments in the draft plan, then confirm one-time payments or recurring subscriptions before estimating.'
 const trackingReason = 'You described customer tracking or follow-ups. Keep enquiries and their next actions organised.'
 const suggestedTrackingReason = 'Suggested for your services-to-booking journey: track interested customers, bookings and follow-ups. Remove this if a separate customer tracker is unnecessary.'
 const managementReason = 'Suggested to let staff manage the customer tracker and follow-ups alongside the public website.'
 const leadReason = 'Suggested for lead generation: keep enquiries organised and track follow-ups. Remove this if your team handles leads in another system.'
-const derivedReasons = new Set([bookingReason, trackingReason, suggestedTrackingReason, managementReason, leadReason])
+const derivedReasons = new Set([bookingReason, paymentsReason, trackingReason, suggestedTrackingReason, managementReason, leadReason])
 
 // Narrow safeguards for explicit English requirements. The model still handles
 // broader business interpretation; these rules prevent clear requests being lost.
 export function workflowRecommendations(answers: WorkflowAnswer[], existing: Recommendation[]): Recommendation[] {
-  const decisions = new Map<'booking' | 'crm', Decision>()
+  const decisions = new Map<'booking' | 'crm' | 'payments', Decision>()
   const context = answers.map(answer => answer.text).join('\n')
   const serviceWebsite = /\bweb\s?sites?\b/i.test(context) && /\bservices?\b|about us|learn about/i.test(context)
   const uncertain = /\b(?:maybe|might|not sure|unsure|perhaps|later|future)\b/i
   const desired = /\b(?:wants?|needs?|should|will|would|can|cannot|can['’]t|unable|start|allow|let|enable|build|requires?|looking for|struggl(?:e|es|ing)|lost|losing|missed|difficult(?:y|ies)?|not able)\b/i
   const booking = /\b(?:book(?=\s+(?:online|or pay))|(?:to|cannot|can['’]t|can)\s+book|book(?:ing)?\s+(?:(?:a|an|the|their|our|my)\s+)?(?:slots?|appointments?|consultations?|visits?|services?|tables?|tastings?)|(?:slot|appointment|consultation)\s+(?:booking|scheduling)|bookings?(?:\s+and\s+scheduling)?|schedule\s+(?:(?:a|an|the)\s+)?appointments?)\b/i
   const crm = /\b(?:track(?:ing)?\s+(?:(?:our|my|the)\s+)?(?:customers?|leads?|enquiries|inquiries)|follow[- ]?ups?|lead (?:management|generation)|crm)\b/i
+  const payments = /\b(?:book(?:ing)?\s+(?:and|or)\s+pay(?:ments?)?|payments?|checkout|pay\s+online|(?:cannot|can['’]t|struggle\s+to)\s+pay)\b/i
   for (const answer of answers) {
     for (const clause of answer.text.split(/[.!?;\n]+|\s+(?:but|however|instead)\s+/i)) {
       const historical = answer.field === 'current' || /\b(?:already|currently|today|existing)\b/i.test(clause)
-      for (const [id, pattern] of [['booking', booking], ['crm', crm]] as const) {
+      for (const [id, pattern] of [['booking', booking], ['crm', crm], ['payments', payments]] as const) {
         const match = pattern.exec(clause)
         if (!match) continue
         const before = clause.slice(0, match.index)
@@ -47,11 +49,11 @@ export function workflowRecommendations(answers: WorkflowAnswer[], existing: Rec
   if (bookingDecision?.include && serviceWebsite && !decisions.has('crm') && !/\b(?:existing|current|already|connect|use|using)\b[^.!?\n]*\bcrm\b/i.test(context)) {
     decisions.set('crm', { include: true, evidence: bookingDecision.evidence })
   }
-  const recommendations = existing.filter(item => !derivedReasons.has(item.reason) && (item.group !== 'capabilityIds' || !decisions.has(item.id as 'booking' | 'crm')))
+  const recommendations = existing.filter(item => !derivedReasons.has(item.reason) && (item.group !== 'capabilityIds' || !decisions.has(item.id as 'booking' | 'crm' | 'payments')))
   for (const [id, decision] of decisions) {
     if (!decision.include) continue
     recommendations.push({ group: 'capabilityIds', id, evidence: decision.evidence,
-      reason: id === 'booking' ? bookingReason : /\blead generation\b/i.test(decision.evidence) ? leadReason : crm.test(decision.evidence) ? trackingReason : suggestedTrackingReason,
+      reason: id === 'booking' ? bookingReason : id === 'payments' ? paymentsReason : /\blead generation\b/i.test(decision.evidence) ? leadReason : crm.test(decision.evidence) ? trackingReason : suggestedTrackingReason,
     })
   }
   if (bookingDecision?.include && serviceWebsite && !recommendations.some(item => item.group === 'surfaceIds' && item.id === 'website')) {
