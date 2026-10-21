@@ -1,16 +1,17 @@
 import { CAPABILITIES, INTEGRATIONS, MODIFIERS, SURFACES, SOLUTION_CATALOG_VERSION, emptyScope, isRecord, parseIds, reviewScope, type SolutionScope } from './solutionCatalog'
 import { reconcileRequestedSurfaces, surfaceClarifications } from './discoverySurfaceIntent'
+import { workflowRecommendations } from './discoveryWorkflowIntent'
 
 export const DISCOVERY_VERSION = 1
 export const MAX_DISCOVERY_TURNS = 8
 export const QUESTIONS = [
   { id: 'business', label: 'Your business', text: 'Tell me a little about your business and the people you serve.', options: [] },
-  { id: 'pain', label: 'Main difficulty', text: 'What is the biggest difficulty you want to solve, and how does it affect your day?', options: ['Enquiries are getting lost', 'Too much manual work', 'Customers struggle to book or pay', 'I’m not sure yet'] },
+  { id: 'pain', label: 'Main difficulty', text: 'What is the biggest difficulty you want to solve, and how does it affect your day?', options: ['Enquiries are getting lost', 'Too much manual work', 'Customers struggle to book or pay'] },
   { id: 'current', label: 'Current process and tools', text: 'How do you handle this today? Tell me what tools you use and where the process breaks down.', options: ['WhatsApp and spreadsheets', 'An existing CRM', 'Mostly manual work', 'We are starting from scratch'] },
   { id: 'workflow', label: 'Desired outcome and workflow', text: 'Walk me through what you would like to happen, from the first customer interaction to a successful result.', options: [] },
   { id: 'users', label: 'People and access', text: 'Who will use the solution, and do they need a website, a browser workspace, a mobile app, or a combination?', options: [] },
-  { id: 'constraints', label: 'Existing systems and constraints', text: 'What must we connect to or preserve? Include existing data, offline use, special security needs, or anything outside a standard build.', options: ['No existing systems or special requirements', 'Connect WhatsApp', 'Connect our current CRM', 'I’m not sure yet'] },
-  { id: 'priority', label: 'First-release priority', text: 'What matters most for the first release? You can also share a target date or budget comfort if you know it.', options: ['Start small and grow', 'Launch as soon as practical', 'Connect the whole workflow', 'I’m not sure yet'] },
+  { id: 'constraints', label: 'Existing systems and constraints', text: 'What must we connect to or preserve? Include existing data, offline use, special security needs, or anything outside a standard build.', options: ['No existing systems or special requirements', 'Connect WhatsApp', 'Connect our current CRM'] },
+  { id: 'priority', label: 'First-release priority', text: 'What matters most for the first release? You can also share a target date or budget comfort if you know it.', options: ['Start small and grow', 'Launch as soon as practical', 'Connect the whole workflow'] },
 ] as const
 export type FactId = typeof QUESTIONS[number]['id']
 export interface DiscoveryFact { value: string; evidence: string; status: 'reported' | 'unknown'; source: 'answer' | 'ai' | 'edit' }
@@ -25,6 +26,8 @@ export interface DiscoverySession {
   stage: 'discovery' | 'review' | 'confirmed'
   turns: number
   facts: Partial<Record<FactId, DiscoveryFact>>
+  // Customer-owned text is separate from model-extracted summaries. Optional for older tokens.
+  answers?: Partial<Record<FactId, string>>
   messages: DiscoveryMessage[]
   recommendations: Recommendation[]
   reviewItems: string[]
@@ -44,7 +47,29 @@ export function customerAnswers(session: DiscoverySession): Map<FactId, string> 
       if (question) topic = question.id
     } else if (topic) answers.set(topic, message.text)
   }
+  for (const question of QUESTIONS) {
+    const fact = session.facts[question.id]
+    const saved = session.answers?.[question.id] ?? (fact?.source === 'edit' ? fact.value : undefined)
+    if (saved !== undefined) answers.set(question.id, saved)
+  }
   return answers
+}
+export function originalRequirementAnswers(session: DiscoverySession) {
+  const originals = customerAnswers(session)
+  return QUESTIONS.flatMap(question => {
+    const fact = session.facts[question.id]
+    const text = originals.get(question.id) ?? fact?.evidence
+    return text ? [{ field: question.id, text }] : []
+  })
+}
+function reconcileRequirements(session: DiscoverySession): DiscoverySession {
+  if (session.mode !== 'guided') return session
+  const requested = reconcileRequestedSurfaces(session, QUESTIONS)
+  const recommendations = workflowRecommendations(originalRequirementAnswers(requested), requested.recommendations)
+  return reconcileRequestedSurfaces({ ...requested, recommendations, scope: { ...requested.scope,
+    surfaceIds: requested.scope.surfaceIds.filter(id => !requested.recommendations.some(item => item.group === 'surfaceIds' && item.id === id) || recommendations.some(item => item.group === 'surfaceIds' && item.id === id)),
+    capabilityIds: [...new Set([...requested.scope.capabilityIds.filter(id => !requested.recommendations.some(item => item.group === 'capabilityIds' && item.id === id)), ...recommendations.filter(item => item.group === 'capabilityIds').map(item => item.id as SolutionScope['capabilityIds'][number])])],
+  } }, QUESTIONS)
 }
 export function isFactId(value: unknown): value is FactId {
   return typeof value === 'string' && QUESTIONS.some(question => question.id === value)
@@ -89,11 +114,12 @@ export function recordAnswer(session: DiscoverySession, answer: unknown): Discov
   const updated: DiscoverySession = {
     ...session, revision: session.revision + 1, turns: session.turns + 1,
     facts: { ...session.facts, [question.id]: { value: text, evidence: text, status: isUnknown(text) ? 'unknown' : 'reported', source: 'answer' } },
+    answers: { ...session.answers, [question.id]: text },
     messages: [...session.messages, { role: 'assistant', text: question.text }, { role: 'user', text }], allowPartial: false,
     assistantMessage: 'I’ve saved your answer. The review will separate what you’ve told me from suggested scope.',
   }
   if (!nextQuestion(updated)) updated.stage = 'review'
-  return reconcileRequestedSurfaces(updated, QUESTIONS)
+  return reconcileRequirements(updated)
 }
 
 export interface AgentOutput {
@@ -103,7 +129,8 @@ export interface AgentOutput {
   reviewItems: { text: string; evidence: string }[]
 }
 const recommendationCatalogs = { surfaceIds: SURFACES, capabilityIds: CAPABILITIES, integrationIds: INTEGRATIONS, modifierIds: MODIFIERS }
-export function validateAgentOutput(value: unknown, answer: string): AgentOutput {
+export function validateAgentOutput(value: unknown, answer: string, currentAnswers: readonly string[] = []): AgentOutput {
+  const evidenceSources = [answer, ...currentAnswers]
   if (!isRecord(value)) throw new DiscoveryValidationError('The assistant returned an invalid response.')
   const acknowledgment = boundedText(value.acknowledgment, 800)
   if (!Array.isArray(value.facts) || value.facts.length > QUESTIONS.length || !Array.isArray(value.recommendations) || value.recommendations.length > 25 || !Array.isArray(value.reviewItems) || value.reviewItems.length > 8) throw new DiscoveryValidationError('The assistant returned invalid discovery data.')
@@ -111,7 +138,7 @@ export function validateAgentOutput(value: unknown, answer: string): AgentOutput
   for (const entry of value.facts) {
     if (!isRecord(entry) || !isFactId(entry.field) || facts.some(fact => fact.field === entry.field)) throw new DiscoveryValidationError('The assistant returned invalid fact fields.')
     const evidence = boundedText(entry.evidence)
-    if (!answer.includes(evidence)) throw new DiscoveryValidationError('A fact has no supporting customer evidence.')
+    if (!evidenceSources.some(source => source.includes(evidence))) throw new DiscoveryValidationError('A fact has no supporting customer evidence.')
     facts.push({ field: entry.field, value: boundedText(entry.value, 600), evidence })
   }
   const recommendations: Recommendation[] = []
@@ -126,34 +153,64 @@ export function validateAgentOutput(value: unknown, answer: string): AgentOutput
   const reviewItems = value.reviewItems.map(entry => {
     if (!isRecord(entry)) throw new DiscoveryValidationError('The assistant returned invalid review items.')
     const evidence = boundedText(entry.evidence)
-    if (!answer.includes(evidence)) throw new DiscoveryValidationError('A review item has no customer evidence.')
+    if (!evidenceSources.some(source => source.includes(evidence))) throw new DiscoveryValidationError('A review item has no customer evidence.')
     return { text: boundedText(entry.text, 300), evidence }
   })
   return { acknowledgment, facts, recommendations, reviewItems }
 }
 export function applyAgentOutput(session: DiscoverySession, output: AgentOutput): DiscoverySession {
   const facts = { ...session.facts }
-  for (const fact of output.facts) facts[fact.field] = { value: fact.value, evidence: fact.evidence, status: isUnknown(fact.value) ? 'unknown' : 'reported', source: 'ai' }
-  const evidenceText = Object.values(facts).map(fact => fact?.evidence ?? '').join('\n')
-  const recommendations = output.recommendations.filter(item => evidenceText.includes(item.evidence))
+  for (const fact of output.facts) {
+    if (facts[fact.field]?.source === 'edit') continue
+    facts[fact.field] = { value: fact.value, evidence: fact.evidence, status: isUnknown(fact.value) ? 'unknown' : 'reported', source: 'ai' }
+  }
+  // Omission by the model is not a customer withdrawal. Keep still-supported
+  // suggestions, but never validate against stale summaries of replaced answers.
+  const recommendations = supportedRecommendations(session, [...session.recommendations, ...output.recommendations])
   const updated = { ...session, facts, recommendations, reviewItems: [...new Set([...session.reviewItems, ...output.reviewItems.map(item => item.text)])], assistantMessage: output.acknowledgment, providerStatus: 'available' as const }
   // The server, never the model, decides when to stop questioning.
   if (!nextQuestion(updated)) updated.stage = 'review'
-  const scope = emptyScope()
+  const scope = { ...session.scope }
+  for (const group of ['surfaceIds', 'capabilityIds', 'integrationIds', 'modifierIds'] as const) {
+    scope[group] = session.scope[group].filter(id => !session.recommendations.some(item => item.group === group && item.id === id)) as never
+  }
   for (const suggestion of recommendations) {
     const list = scope[suggestion.group] as string[]
     if (!list.includes(suggestion.id)) list.push(suggestion.id)
   }
   updated.scope = scope
-  return reconcileRequestedSurfaces(updated, QUESTIONS)
+  return reconcileRequirements(updated)
+}
+function supportedRecommendations(session: DiscoverySession, items: Recommendation[]): Recommendation[] {
+  const answers = originalRequirementAnswers(session).map(answer => answer.text)
+  const supported = new Map<string, Recommendation>()
+  for (const item of items) {
+    if (answers.some(answer => answer.includes(item.evidence))) supported.set(`${item.group}:${item.id}`, item)
+  }
+  return [...supported.values()]
 }
 export function editFact(session: DiscoverySession, field: unknown, value: unknown): DiscoverySession {
   if (!isFactId(field)) throw new DiscoveryValidationError('Unknown requirement field.')
   const text = boundedText(value)
-  return reconcileRequestedSurfaces({
-    ...session, revision: session.revision + 1, stage: 'review',
+  const updated: DiscoverySession = {
+    ...session, revision: session.revision + 1, stage: session.stage === 'discovery' ? 'discovery' : 'review',
     facts: { ...session.facts, [field]: { value: text, evidence: text, status: isUnknown(text) ? 'unknown' : 'reported', source: 'edit' } },
-    recommendations: [], reviewItems: [], scope: emptyScope(), allowPartial: false, providerStatus: 'guided_fallback',
-    assistantMessage: 'Your correction is saved. Re-select the solution below so the previous recommendation and estimate cannot carry over unnoticed.',
-  }, QUESTIONS)
+    answers: { ...session.answers, [field]: text },
+    reviewItems: [], allowPartial: false, providerStatus: 'guided_fallback',
+    assistantMessage: 'Your correction is saved. Features still supported by your answers are kept. Review the updated plan before confirming a new estimate.',
+  }
+  const currentAnswers = [...customerAnswers(updated).values()]
+  for (const question of QUESTIONS) {
+    const fact = updated.facts[question.id]
+    if (fact?.source === 'ai' && !currentAnswers.some(answer => answer.includes(fact.evidence))) delete updated.facts[question.id]
+  }
+  updated.recommendations = supportedRecommendations(updated, session.recommendations)
+  // Preserve customer-added choices; remove only recommendations whose evidence
+  // disappeared. Confirmation and the old price remain invalidated above.
+  updated.scope = { ...session.scope }
+  for (const group of ['surfaceIds', 'capabilityIds', 'integrationIds', 'modifierIds'] as const) {
+    const removed = new Set(session.recommendations.filter(item => item.group === group && !updated.recommendations.some(kept => kept.group === group && kept.id === item.id)).map(item => item.id))
+    updated.scope[group] = session.scope[group].filter(id => !removed.has(id)) as never
+  }
+  return reconcileRequirements(updated)
 }

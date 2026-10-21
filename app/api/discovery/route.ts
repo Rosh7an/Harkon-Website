@@ -65,13 +65,26 @@ export async function POST(req: Request) {
       return respond(updated)
     }
     if (body.action === 'review') return respond({ ...session, revision: session.revision + 1, stage: 'review', allowPartial: false })
-    if (body.action === 'edit') return respond(editFact(session, body.field, body.value))
+    if (body.action === 'edit') {
+      const answer = boundedText(body.value)
+      let updated = editFact(session, body.field, answer)
+      try {
+        const output = await consult(updated, answer)
+        if (output) updated = applyAgentOutput(updated, output)
+        else updated.providerStatus = 'guided_fallback'
+      } catch {
+        updated.providerStatus = 'guided_fallback'
+        updated.assistantMessage = 'Your correction is saved. AI assistance is temporarily unavailable; continue the guided questions and review the corrected plan.'
+      }
+      return respond(updated)
+    }
     if (body.action === 'confirm') {
       if (session.stage !== 'review') throw new DiscoveryValidationError('Review your requirements before confirming.')
       if (body.confirmed !== true) throw new DiscoveryValidationError('Confirm the scope before requesting an estimate.')
       const scope = parseScope(body.scope)
       const { issues } = reviewScope(scope)
       if (issues.length) throw new SolutionValidationError(issues.join(' '))
+      if (scope.capabilityIds.includes('payments') && scope.billing === 'undecided') throw new DiscoveryValidationError('Choose one-time or recurring payments before continuing.')
       const reviewItems = discoveryReviewItems(session, scope)
       if (reviewItems.length && body.allowPartial !== true) throw new DiscoveryValidationError('Some requirements need human review. Request a consultation or explicitly exclude them from a partial estimate.')
       return respond({ ...session, revision: session.revision + 1, stage: 'confirmed', scope, allowPartial: reviewItems.length > 0 && body.allowPartial === true })

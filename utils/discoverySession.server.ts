@@ -2,12 +2,17 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:
 import { DISCOVERY_VERSION, DiscoveryValidationError, type DiscoverySession } from './discovery'
 import { SOLUTION_CATALOG_VERSION } from './solutionCatalog'
 
-const developmentSecret = randomBytes(32).toString('hex')
+// Next development reloads modules without ending the server process. Keep the
+// fallback key on that process so existing tokens survive those reloads.
+function developmentSessionSecret() {
+  const serverGlobal = globalThis as typeof globalThis & { __exterDiscoveryDevelopmentSecret?: string }
+  return serverGlobal.__exterDiscoveryDevelopmentSecret ??= randomBytes(32).toString('hex')
+}
 export class DiscoverySessionError extends DiscoveryValidationError {
   readonly code = 'DISCOVERY_SESSION_INVALID'
 }
 function sessionKey() {
-  const secret = process.env.DISCOVERY_SESSION_SECRET || (process.env.NODE_ENV !== 'production' ? developmentSecret : '')
+  const secret = process.env.DISCOVERY_SESSION_SECRET || (process.env.NODE_ENV !== 'production' ? developmentSessionSecret() : '')
   if (!secret || secret.length < 32) throw new Error('Discovery session configuration unavailable')
   return createHash('sha256').update(`exter-discovery-v1:${secret}`).digest()
 }

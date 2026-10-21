@@ -164,8 +164,9 @@ export async function createEstimatePdf(view: DiscoveryResponse, options: PdfOpt
     'Hosting, domains, third-party licenses, messaging charges, AI usage, maintenance, ongoing SEO or marketing and taxes are separate. Unresolved requirements are not priced by this estimate.',
   ])
   section('Next step: review with the team', [
-    'Request a team call, call us directly or contact us on WhatsApp from your estimate page. We will review your needs, clarify open items and prepare a detailed proposal. A call request is not a booked appointment.',
-    'This document is a preliminary planning estimate, not a final quote, invoice or agreement to deliver. Final pricing requires team review.',
+    'This document is an AI-assisted preliminary estimate based on an initial study of the business information you provided. It is not a final quotation, invoice or agreement to deliver.',
+    'Workflow details, integrations, user roles, existing data, security requirements, third-party costs and implementation complexity may change the final scope, price and delivery plan.',
+    'Speak with an Exter Cloud Solution Consultant through the consultation form, call, WhatsApp or email options on the estimate page. The consultant can re-evaluate the recommendation, remove unnecessary features, identify missing requirements, and decide what fits the current budget versus a later phase.',
   ])
   font(8, false, MUTED)
   if (y + 12 > BOTTOM) newPage()
