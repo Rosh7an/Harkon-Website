@@ -65,7 +65,7 @@ export default function Hero() {
   return (
     <section
       id="hero"
-      style={{ height: '100vh', minHeight: 600, position: 'relative', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+      className="hero-section"
     >
       {/* Video */}
       <div style={{ position: 'absolute', inset: 0, zIndex: 0 }}>
@@ -83,13 +83,13 @@ export default function Hero() {
       {/* Grid */}
       <div className="hero-grid" style={{ position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none' }} />
 
-      {/* Content — fills available height above stats, centers vertically */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', position: 'relative', zIndex: 3, padding: '0 20px', minHeight: 0 }}>
+      {/* Content grows on short screens while keeping clear of the fixed header. */}
+      <div className="hero-content">
       <div
         style={{ textAlign: 'center', maxWidth: 960, width: '100%' }}
       >
         {/* Badge */}
-        <div className="hidden sm:inline-flex" style={{ alignItems: 'center', gap: 8, border: '1px solid rgba(216,90,48,.25)', background: 'rgba(216,90,48,.06)', color: 'var(--accent)', fontSize: 10, fontWeight: 500, letterSpacing: '0.14em', textTransform: 'uppercase', padding: '7px 16px', borderRadius: 3, marginBottom: 28 }}>
+        <div className="hero-badge" style={{ alignItems: 'center', gap: 8, border: '1px solid rgba(216,90,48,.25)', background: 'rgba(216,90,48,.06)', color: 'var(--accent)', fontSize: 10, fontWeight: 500, letterSpacing: '0.14em', textTransform: 'uppercase', padding: '7px 16px', borderRadius: 3, marginBottom: 28 }}>
           <div style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--accent)', boxShadow: '0 0 10px var(--accent)', animation: 'pulse 2s infinite', flexShrink: 0 }} />
           Digital solutions for growing businesses
         </div>
@@ -109,7 +109,7 @@ export default function Hero() {
         </p>
 
         {/* Actions */}
-        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', animation: 'fadeUp .8s .4s ease both' }}>
+        <div className="hero-actions" style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', animation: 'fadeUp .8s .4s ease both' }}>
           <button
             onClick={() => scrollTo('services')}
             style={{ padding: '14px 32px', background: 'var(--accent)', color: '#fff', borderRadius: 4, fontSize: 13, fontWeight: 600, letterSpacing: '0.03em', border: 'none', cursor: 'pointer', fontFamily: 'var(--font)', display: 'inline-flex', alignItems: 'center', gap: 8, transition: 'all .3s', whiteSpace: 'nowrap' }}
@@ -132,6 +132,7 @@ export default function Hero() {
 
       {/* Stats strip — natural flex item pinned to bottom, never overlaps content */}
       <div
+        className="hero-stats"
         style={{ position: 'relative', zIndex: 3, borderTop: '1px solid var(--border)', display: 'flex', flexWrap: 'wrap', animation: 'fadeIn 1s .7s ease both', opacity: 0, animationFillMode: 'both' }}
       >
         {HERO_STATS.map(s => (
