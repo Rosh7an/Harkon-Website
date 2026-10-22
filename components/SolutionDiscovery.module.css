@@ -200,8 +200,10 @@
 .steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem; margin-top: .8rem; }
 .step { display: flex; gap: .45rem; align-items: center; font-size: .8125rem; color: var(--muted); }
 .currentStep { color: var(--text); font-weight: 600; }
+.completedStep { color: var(--accent-text); }
 .stepNumber { display: grid; place-items: center; flex-shrink: 0; width: 1.4rem; height: 1.4rem; border: 1px solid var(--border-hi); border-radius: 50%; font-size: .6875rem; }
 .currentStep .stepNumber { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.completedStep .stepNumber { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 15%, var(--input-fill)); color: var(--accent-text); }
 .summary { position: relative; display: flex; flex-direction: column; height: var(--planner-panel-height); overflow: hidden; }
 .summary[data-expanded='false'] { height: auto; }
 .summaryHeader, .summaryFooter { flex: 0 0 auto; }

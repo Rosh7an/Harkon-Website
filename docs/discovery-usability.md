@@ -11,9 +11,18 @@ to do next. This assessment is based on interface inspection, not a customer stu
 
 ## Changes
 
-- Three visible stages: tell us, review the plan, see the estimate. Conversation
-  progress follows captured topics, including explicit uncertainty; it is not a
+- Three visible milestones: Requirements, Plan Selection, Estimate, with a visible
+  "Step X of 3", distinct active states and checks for completed phases. Each phase
+  receives one third of the progress bar. Guided discovery advances by captured
+  topics (including explicit uncertainty); question counts stay in the active panel.
+  Manual requirements cover interface selection; features and details advance the
+  selection phase. Review consent advances the final phase to at most 95%, and only
+  a confirmed server estimate reaches 100%. This is workflow progress, not a
   confidence score or a declaration that every requirement is known.
+- Discovery requests retry a connection failure or HTTP 502/503/504 once using the
+  same serialized snapshot. Aborts, validation failures and rate limits do not retry.
+  Successful responses are validated before changing the current panel, so malformed
+  data leaves the existing question, inputs and draft intact.
 - Outcome-first choice labels: an online workspace, customer follow-ups, staff
   logins and website search setup. Canonical IDs and pricing rules are unchanged.
 - Connections and extra needs use an optional disclosure, with a selected count.

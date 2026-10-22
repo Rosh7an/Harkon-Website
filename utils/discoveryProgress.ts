@@ -41,14 +41,29 @@ export function discoveryProgress(session: DiscoverySession | null, input: Progr
   const scope = input.scope ?? session?.scope ?? emptyScope()
   const points = scopeProgress(scope, input.reviewed)
   const done = !!session && session.stage === 'confirmed' && input.hasResult === true
-  const step = done ? 3 : session?.stage === 'review' && input.planStep === 3 ? 2 : 1
-  let percent = !session ? 0 : session.mode === 'guided' ? topics * 10 : points
-  if (session?.mode === 'guided' && session.stage !== 'discovery') {
-    // Finishing review also addresses unasked topics as exclusions, not answers.
-    percent = points === 90 && input.planStep === 3 ? 90 : Math.min(90, percent + Math.round(points / 90 * 20))
+  const step = !session || session.stage === 'discovery' ? 1
+    : session.stage === 'confirmed' || input.planStep === 3 ? 3
+      : session.mode === 'manual' && (input.planStep ?? 0) === 0 ? 1 : 2
+  const phaseSize = 100 / 3
+  let percent = 0
+  if (session && step === 1) {
+    percent = phaseSize * (session.mode === 'guided' ? topics / QUESTIONS.length : scope.surfaceIds.length && input.reviewed?.surfaceIds === true ? 1 : 0)
+  } else if (session && step === 2) {
+    // Manual requirements already credited interfaces in phase one. Guided
+    // selection reviews interfaces here, alongside features and other details.
+    const selection = session.mode === 'manual' ? Math.max(0, points - 20) / 70 : points / 90
+    percent = phaseSize * (1 + selection)
+  } else if (session && step === 3) {
+    percent = 2 * phaseSize
+    if (points === 90 && !reviewScope(scope).issues.length) {
+      const needsPartial = discoveryReviewItems(session, scope).length > 0
+      const approvals = (input.approved === true ? 1 : 0) + (needsPartial && input.allowPartial === true ? 1 : 0)
+      // Leave room for the server to return the actual estimate before 100%.
+      percent += (95 - percent) * approvals / (needsPartial ? 2 : 1)
+    }
   }
-  if (session?.stage === 'review' && points === 90 && input.planStep === 3 && input.approved && !reviewScope(scope).issues.length && (!discoveryReviewItems(session, scope).length || input.allowPartial === true)) percent = 95
   if (done) percent = 100
+  percent = Math.round(Math.max(0, Math.min(100, percent)))
   const detail = !session ? 'Choose an approach. Each starts at zero and keeps its own draft.'
     : done ? session.allowPartial ? 'Selected work estimated. Unanswered items are not included.' : 'Your selected work has been estimated.'
       : session.mode === 'guided' ? `${topics} of ${QUESTIONS.length} topics covered${uncertain ? ` · ${uncertain} still ${uncertain === 1 ? 'needs' : 'need'} clarification` : ''}${session.stage !== 'discovery' ? ' · Review missing details and assumptions.' : ''}`

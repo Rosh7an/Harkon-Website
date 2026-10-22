@@ -63,6 +63,19 @@ describe('discovery API', () => {
     expect(answer.data.question.id).toBe('pain')
     expect(answer.data.session.providerStatus).toBe('guided_fallback')
   })
+  it('replays a failed transport request from the same snapshot without accumulating answers', async () => {
+    const start = (await send({ action: 'start', mode: 'guided' })).data
+    const body = { action: 'answer', token: start.token, revision: 0, answer: 'We run a shop' }
+    const first = await send(body)
+    const retry = await send(body)
+    expect(first.status).toBe(200)
+    expect(retry.status).toBe(200)
+    expect(retry.data.session).toEqual(first.data.session)
+    expect(retry.data.session.revision).toBe(1)
+    expect(retry.data.session.turns).toBe(1)
+    expect(retry.data.session.messages.filter((message: { role: string }) => message.role === 'user')).toHaveLength(1)
+    expect(retry.data.question.id).toBe('pain')
+  })
   it('reviews a successful multi-topic AI extraction before pricing confirmed recommendations', async () => {
     const facts = [
       { field: 'business' as const, value: 'We run a studio', evidence: 'We run a studio' },

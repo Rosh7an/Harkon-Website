@@ -3,7 +3,7 @@ import { readDraftStore, type LocalDraft } from '../utils/discoveryDraft'
 import { emptyScope } from '../utils/solutionCatalog'
 
 const now = 1000
-const draft: LocalDraft = { token: 'signed-token', expiresAt: 2000, scope: emptyScope(), answer: '', editing: null, correction: '', planStep: 0, reviewed: {} }
+const draft: LocalDraft = { token: 'signed-token', expiresAt: 2000, scope: emptyScope(), answer: '', selectedOptions: [], editing: null, correction: '', planStep: 0, reviewed: {} }
 const stored = (manual: unknown = draft, guided: unknown = draft) => JSON.stringify({ version: 2, activeMode: 'manual', drafts: { manual, guided } })
 describe('bounded separate draft storage', () => {
   it('restores each draft independently, including unfinished answers and choices', () => {

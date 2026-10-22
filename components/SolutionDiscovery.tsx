@@ -10,6 +10,7 @@ import { CAPABILITIES, INTEGRATIONS, MODIFIERS, SURFACES, clearInactiveAnswers, 
 import { CAPABILITY_CHOICES, INTEGRATION_CHOICES, MODIFIER_CHOICES, SURFACE_CHOICES, customerWording } from '@/utils/discoveryPresentation'
 import { DRAFT_STORAGE_KEY, LEGACY_STORAGE_KEY, readDraftStore, type DiscoveryMode, type DiscoveryResponse, type DraftStore, type LocalDraft } from '@/utils/discoveryDraft'
 import { REVIEW_FIELDS, discoveryProgress, type PlanStep, type ReviewedFields } from '@/utils/discoveryProgress'
+import { RejectedSession, requestDiscovery } from '@/utils/discoveryRequest'
 import type { BusinessContactLinks } from '@/utils/businessContact'
 
 export type { DiscoveryResponse } from '@/utils/discoveryDraft'
@@ -24,16 +25,6 @@ function ContactIcon({ whatsapp = false }: { whatsapp?: boolean }) {
     {whatsapp ? <><path d="M21 11.5a8.5 8.5 0 0 1-12.7 7.4L3 21l1.8-5.4A8.5 8.5 0 1 1 21 11.5Z" /><path d="M8.2 7.8c.6 3.9 2.2 5.5 6.1 6.1l1.2-1.5-2-1-1 1c-1.3-.6-2-1.3-2.6-2.6l1-1-1-2-1.7 1Z" /></> : <path d="m8 3 3 5-2 2a14 14 0 0 0 5 5l2-2 5 3c0 3-2 5-4 5C10 21 3 14 3 7c0-2 2-4 5-4Z" />}
   </svg>
 }
-class RejectedSession extends Error {}
-async function readResponse(response: Response): Promise<DiscoveryResponse> {
-  const data = await response.json()
-  if (!response.ok) {
-    if (response.status === 400 && data.code === 'DISCOVERY_SESSION_INVALID') throw new RejectedSession(data.error)
-    throw new Error(data.error || 'Could not save your discovery. Please retry.')
-  }
-  return data
-}
-
 function ScopeGroup({ title, catalog, selected, disabled, onToggle, hideLegend = false }: {
   title: string
   catalog: Record<string, { name: string; description: string }>
@@ -259,8 +250,7 @@ export default function SolutionDiscovery({
     const timer = setTimeout(() => controller.abort(), 25000)
     void (async () => {
       try {
-        const response = await fetch('/api/discovery', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'restore', token }), signal: controller.signal })
-        const data = await readResponse(response)
+        const data = await requestDiscovery({ action: 'restore', token }, controller.signal)
         if (expectedMode && data.session?.mode !== expectedMode) throw new Error('This saved draft belongs to another approach. Please start again.')
         if (active && !controller.signal.aborted) accept(data, local)
       } catch (failure) {
@@ -309,11 +299,7 @@ export default function SolutionDiscovery({
     const timer = setTimeout(() => controller.abort(), 25000)
     try {
       const current = currentView.current
-      const response = await fetch('/api/discovery', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
-        body: JSON.stringify({ token: current?.token, revision: current?.session.revision, ...payload }),
-      })
-      const data = await readResponse(response)
+      const data = await requestDiscovery({ token: current?.token, revision: current?.session.revision, ...payload }, controller.signal)
       if (!mounted.current || controller.signal.aborted) return false
       const mode = expectedMode ?? current?.session.mode
       if (mode && data.session?.mode !== mode) throw new Error('The approach changed unexpectedly. Your current draft is still here; please retry.')
@@ -565,6 +551,7 @@ export default function SolutionDiscovery({
               </div>
             </form>}
             {!revisitingQuestion && view.question && <form onSubmit={event => { event.preventDefault(); if (!answerTooLong) void sendAnswer(composedAnswer) }} className="space-y-4">
+              <p className={styles.eyebrow}>Question {QUESTIONS.findIndex(question => question.id === view.question?.id) + 1} of {QUESTIONS.length}</p>
               <div className={styles.questionHeader}>
                 <h2 ref={questionHeading} tabIndex={-1} className="text-xl font-semibold outline-none">{view.question.text}</h2>
               </div>
