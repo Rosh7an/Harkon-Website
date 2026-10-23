@@ -19,6 +19,7 @@ export interface LocalDraft {
   editing: FactId | null
   correction: string
   planStep: PlanStep
+  completedPlanSteps?: number
   reviewed: ReviewedFields
   needsRestart?: true
 }
@@ -43,10 +44,11 @@ export function readDraftStore(raw: string | null, now = Date.now()): DraftStore
       const selectedOptions = entry.selectedOptions === undefined ? [] : entry.selectedOptions
       if (typeof entry.answer !== 'string' || entry.answer.length > 2000 || !Array.isArray(selectedOptions) || selectedOptions.length > 8 || selectedOptions.some(option => typeof option !== 'string' || !option.trim() || option.length > 200) || new Set(selectedOptions).size !== selectedOptions.length || typeof entry.correction !== 'string' || entry.correction.length > 2000 || !Number.isInteger(entry.planStep) || ![0, 1, 2, 3].includes(entry.planStep as number) || !isRecord(entry.reviewed)) continue
       if (entry.editing !== null && !isFactId(entry.editing)) continue
+      if (entry.completedPlanSteps !== undefined && (!Number.isInteger(entry.completedPlanSteps) || ![0, 1, 2, 3].includes(entry.completedPlanSteps as number))) continue
       try {
         const reviewed: ReviewedFields = {}
         for (const field of REVIEW_FIELDS) if (Object.hasOwn(entry.reviewed, field) && entry.reviewed[field] === true) reviewed[field] = true
-        drafts[mode] = { token: entry.needsRestart === true ? '' : entry.token, expiresAt: entry.expiresAt, scope: parseScope(entry.scope), answer: entry.answer, selectedOptions: [...selectedOptions], correction: entry.correction, editing: entry.editing as FactId | null, planStep: entry.planStep as PlanStep, reviewed, ...(entry.needsRestart === true ? { needsRestart: true as const } : {}) }
+        drafts[mode] = { token: entry.needsRestart === true ? '' : entry.token, expiresAt: entry.expiresAt, scope: parseScope(entry.scope), answer: entry.answer, selectedOptions: [...selectedOptions], correction: entry.correction, editing: entry.editing as FactId | null, planStep: entry.planStep as PlanStep, ...(entry.completedPlanSteps !== undefined ? { completedPlanSteps: entry.completedPlanSteps as number } : {}), reviewed, ...(entry.needsRestart === true ? { needsRestart: true as const } : {}) }
       } catch { /* A corrupt draft must not prevent recovery of the other approach. */ }
     }
     return { version: 2, activeMode: value.activeMode as DiscoveryMode, drafts }

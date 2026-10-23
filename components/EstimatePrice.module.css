@@ -1,0 +1,11 @@
+.pricing { min-width: 0; display: grid; gap: .35rem; }
+.standard { color: var(--muted); font-size: .875rem; line-height: 1.5; }
+.standard s { display: inline-block; text-decoration-thickness: 1px; }
+.label { color: var(--text); font-size: .875rem; font-weight: 600; }
+.amount { display: grid; color: var(--text); font-weight: 800; font-size: clamp(1.25rem, 3.5vw, 2.5rem); line-height: 1.3; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.animated, .sizing, .printAmount { grid-area: 1 / 1; min-width: 0; }
+.sizing { visibility: hidden; }
+.note { color: var(--muted); font-size: .8125rem; line-height: 1.5; max-width: 52ch; }
+.printAmount { display: none; }
+@media print { .animated, .sizing { display: none; } .printAmount { display: inline; } }
+@media (max-width: 380px) { .amount { font-size: 1.125rem; } }

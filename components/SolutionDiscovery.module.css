@@ -98,8 +98,10 @@
 }
 .intro .modeHint { font-size: .8125rem; }
 .workspace { --planner-panel-height: clamp(32rem, calc(100svh - 13rem), 40rem); display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 1.25rem; align-items: start; overflow-anchor: none; }
-.questionPanel { position: relative; height: var(--planner-panel-height); overflow-y: auto; overscroll-behavior-y: auto; scrollbar-gutter: stable; scrollbar-width: thin; padding: 1.75rem; scroll-margin-top: 6rem; }
-.questionPanel[data-question-layout='true'] { display: flex; flex-direction: column; height: var(--planner-panel-height); overflow: clip; }
+.panelFrame { height: var(--planner-panel-height); overflow: hidden; }
+.questionPanel { position: relative; height: 100%; overflow-y: auto; overscroll-behavior-y: auto; scrollbar-gutter: stable; scrollbar-width: thin; padding: 1.75rem; scroll-margin-top: 6rem; }
+.questionPanel[data-question-layout='true'] { display: flex; flex-direction: column; height: 100%; overflow: clip; }
+.questionPanel:focus-visible { outline-offset: -3px; }
 .questionScroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior-y: auto; scrollbar-gutter: stable; scrollbar-width: thin; padding: .25rem; }
 .questionPanel > .questionScroll { margin-top: 0; }
 .questionScroll:focus-visible { outline-offset: -3px; }
@@ -195,15 +197,22 @@
 .progressPanel { padding: 1rem 1.25rem; margin-bottom: 1.25rem; }
 .progressCompact { max-width: none; padding: .75rem 1rem; margin-bottom: .75rem; border-radius: 1rem; box-shadow: none; }
 .progressValue { color: var(--accent-text); font-size: 1.125rem; font-weight: 750; font-variant-numeric: tabular-nums; }
-.progressTrack { height: .375rem; border-radius: 999px; background: color-mix(in srgb, var(--text) 12%, transparent); overflow: hidden; }
-.progressFill { height: 100%; width: 100%; transform-origin: left; background: linear-gradient(90deg, var(--accent), #f5b186); border-radius: inherit; transition: transform .3s ease; }
-.steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem; margin-top: .8rem; }
-.step { display: flex; gap: .45rem; align-items: center; font-size: .8125rem; color: var(--muted); }
+.progressTrack { position: relative; height: .375rem; margin: 1rem .65rem 1.25rem 0; border-radius: 999px; background: color-mix(in srgb, var(--text) 12%, transparent); }
+.progressMarker { position: absolute; top: 50%; transform: translate(-50%, -50%); display: grid; place-items: center; width: 1.25rem; height: 1.25rem; border: 1px solid var(--border-hi); border-radius: 50%; background: var(--panel); color: var(--muted); font-size: .625rem; font-weight: 700; }
+.completedMarker { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.progressFill { height: 100%; width: 100%; transform: scaleX(var(--progress-ratio, 0)); transform-origin: left; background: linear-gradient(90deg, var(--accent), #f5b186); border-radius: inherit; transition: transform .3s ease; }
+.steps { position: relative; min-height: 1.25rem; margin: .8rem .65rem 0 0; }
+.step { position: absolute; top: 0; width: max-content; max-width: 10rem; translate: -50% 0; font-size: .8125rem; line-height: 1.5; text-align: center; color: var(--muted); }
+.step:last-child { translate: -100% 0; text-align: right; }
 .currentStep { color: var(--text); font-weight: 600; }
 .completedStep { color: var(--accent-text); }
-.stepNumber { display: grid; place-items: center; flex-shrink: 0; width: 1.4rem; height: 1.4rem; border: 1px solid var(--border-hi); border-radius: 50%; font-size: .6875rem; }
-.currentStep .stepNumber { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
-.completedStep .stepNumber { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 15%, var(--input-fill)); color: var(--accent-text); }
+@media (max-width: 767px) {
+  /* Guided checkpoints are close together: retain their horizontal anchors,
+     but stagger labels in chronological order rather than overlap the text. */
+  .steps[data-guided='true'] { min-height: 4.25rem; }
+  .steps[data-guided='true'] .step:nth-child(2) { top: 1.5rem; }
+  .steps[data-guided='true'] .step:nth-child(3) { top: 3rem; }
+}
 .summary { position: relative; display: flex; flex-direction: column; height: var(--planner-panel-height); overflow: hidden; }
 .summary[data-expanded='false'] { height: auto; }
 .summaryHeader, .summaryFooter { flex: 0 0 auto; }
@@ -240,8 +249,8 @@
 .preliminaryNotice { display: grid; gap: .55rem; padding: 1rem; border: 1px solid color-mix(in srgb, var(--accent) 50%, var(--border)); border-radius: 1rem; background: color-mix(in srgb, var(--accent) 8%, var(--surface)); font-size: .875rem; }
 .preliminaryNotice h3 { font-weight: 700; }
 .preliminaryNotice p { color: var(--muted); }
-.contactActions { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 1rem; }
-.contactLink { display: inline-flex; align-items: center; justify-content: center; gap: .5rem; min-height: 44px; text-decoration: none; transition: background-color .18s ease, border-color .18s ease; }
+.contactActions { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); grid-auto-rows: 1fr; gap: .75rem; margin-top: 1rem; }
+.contactLink { display: inline-flex; align-items: center; justify-content: center; gap: .5rem; min-width: 0; min-height: 48px; height: 100%; font-size: .9375rem; line-height: 1.4; text-align: center; text-decoration: none; transition: background-color .18s ease, border-color .18s ease; }
 .contactLink:not(:disabled):hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--input-fill)); }
 .contactLink svg { flex-shrink: 0; }
 .contactLink:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 4px; }
@@ -258,6 +267,7 @@
   .summary { position: static; height: auto; }
   .summaryBody[data-expanded='true'] { flex: none; height: clamp(12rem, 45svh, 24rem); }
   .questionPanel { padding: 1.5rem; }
+  .panelFrame { height: auto; }
   .questionPanel, .questionPanel[data-question-layout='true'] { height: auto; overflow: visible; }
   .questionScroll { flex: none; overflow: visible; }
   .actions, .questionScroll .actions { position: static; margin: .75rem 0 0; padding: .75rem 0 max(.25rem, env(safe-area-inset-bottom)); background: transparent; border-top: 1px solid var(--border); border-radius: 0; }
@@ -277,17 +287,18 @@
   .planToggle { width: 100%; min-width: 0; margin-left: 0; }
   .glass { border-radius: 1.1rem; }
   .progressPanel { padding: 1rem; }
-  .step { flex-direction: column; align-items: start; font-size: .75rem; }
+  .step { font-size: .75rem; }
   .questionHeader h2 { font-size: 1.125rem; line-height: 1.45; text-wrap: pretty; }
   .questionScroll > :not(:first-child), .questionScroll form > :not(:first-child) { margin-top: .75rem; }
   .answerSuggestions > div { grid-template-columns: minmax(0, 1fr); }
   .answerSuggestions button { padding: .5rem .75rem; font-size: .8125rem; line-height: 1.4; }
   .actions button { flex: 1 1 auto; padding-inline: .85rem; }
   .reviewRows > div { flex-direction: column; }
-  .contactActions > * { flex: 1 1 auto; }
   .paymentChoices { grid-template-columns: minmax(0, 1fr); }
   .warningActions > * { flex: 1 1 100%; }
 }
 @media (max-height: 500px) { .workspace { --planner-panel-height: clamp(20rem, calc(100svh - 8rem), 26rem); } }
 @media (prefers-reduced-transparency: reduce) { .glass, .aiOverlay { background: var(--panel); -webkit-backdrop-filter: none; backdrop-filter: none; } .aiOverlay::before { -webkit-backdrop-filter: none; backdrop-filter: none; } }
 @media (prefers-reduced-motion: reduce) { .plannerSection, .plannerSection *, .experience *::before, .experience *::after { transition: none !important; animation: none !important; scroll-behavior: auto; opacity: 1 !important; transform: none !important; } }
+/* Preserve progress and checkpoint geometry when motion is disabled. */
+@media (prefers-reduced-motion: reduce) { .plannerSection .progressFill { transform: scaleX(var(--progress-ratio, 0)) !important; } .plannerSection .progressMarker { transform: translate(-50%, -50%) !important; } }
