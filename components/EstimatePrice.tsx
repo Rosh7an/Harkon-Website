@@ -10,11 +10,13 @@ const range = (low: number, high: number) => `${money(low)}–${money(high)}`
 function PriceReveal({ pricing }: { pricing: EstimatePricing }) {
   const container = useRef<HTMLDivElement>(null)
   const [display, setDisplay] = useState({ low: pricing.standardLow, high: pricing.standardHigh })
+  const [settled, setSettled] = useState(false)
   const finalPrice = range(pricing.offerLow, pricing.offerHigh)
 
   useEffect(() => {
     if (typeof window.matchMedia !== 'function') {
       setDisplay({ low: pricing.offerLow, high: pricing.offerHigh })
+      setSettled(true)
       return
     }
     const motion = window.matchMedia('(prefers-reduced-motion: reduce)')
@@ -28,6 +30,7 @@ function PriceReveal({ pricing }: { pricing: EstimatePricing }) {
       cancelAnimationFrame(frame)
       clearTimeout(timer)
       setDisplay({ low: pricing.offerLow, high: pricing.offerHigh })
+      setSettled(true)
     }
     const tick = (now: number) => {
       const elapsed = now - start
@@ -65,14 +68,16 @@ function PriceReveal({ pricing }: { pricing: EstimatePricing }) {
   }, [pricing.standardLow, pricing.standardHigh, pricing.offerLow, pricing.offerHigh])
 
   return <div ref={container} className={styles.pricing}>
-    <p className={styles.standard}>Standard price <s>{range(pricing.standardLow, pricing.standardHigh)}</s></p>
     <p className={styles.label}>Promotional build estimate</p>
-    <p className={styles.amount}>
-      <span className={styles.sizing} aria-hidden="true">{range(pricing.standardLow, pricing.standardHigh)}</span>
-      <span className={styles.animated} aria-hidden="true" data-price-final={finalPrice}>{range(display.low, display.high)}</span>
-      <span className={styles.printAmount} aria-hidden="true">{finalPrice}</span>
-      <span className="sr-only">{finalPrice}</span>
-    </p>
+    <div className={styles.priceRow}>
+      <p className={styles.amount}>
+        <span className={styles.sizing} aria-hidden="true">{range(pricing.standardLow, pricing.standardHigh)}</span>
+        <span className={styles.animated} aria-hidden="true" data-price-final={finalPrice}>{range(display.low, display.high)}</span>
+        <span className={styles.printAmount} aria-hidden="true">{finalPrice}</span>
+        <span className="sr-only">{finalPrice}</span>
+      </p>
+      <p className={styles.standard} data-revealed={settled} aria-hidden={!settled}>Standard price <s>{range(pricing.standardLow, pricing.standardHigh)}</s></p>
+    </div>
     <p className={styles.note}>28.6% off the standard build price. Final scope and quotation require team review.</p>
   </div>
 }

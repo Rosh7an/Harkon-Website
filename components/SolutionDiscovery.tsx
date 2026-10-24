@@ -546,7 +546,7 @@ export default function SolutionDiscovery({
           {session.stage === 'discovery' && <div ref={questionScroll} className={`${styles.questionScroll} space-y-4`} role="region" aria-label="Current question — scroll for more" tabIndex={0}>
             {session.turns > 0 && <details open className={styles.answerRecap} key={`${session.revision}:${revisitingQuestion ?? 'current'}`}><summary>What AI understood</summary><p>{customerWording(session.assistantMessage)}</p></details>}
             {session.providerStatus === 'guided_fallback' && session.turns > 0 && <p role="status" className="text-sm text-[var(--muted)]">Your answers are saved. AI suggestions are unavailable right now, but you can keep going and review your choices.</p>}
-            {revisitingQuestion && <form onSubmit={event => { event.preventDefault(); void saveRevisitedAnswer() }} className="space-y-4">
+            {revisitingQuestion && <form onSubmit={event => { event.preventDefault(); void saveRevisitedAnswer() }} className={styles.questionForm}>
               <p className={styles.eyebrow}>EARLIER QUESTION</p>
               <div className={styles.questionHeader}>
                 <h2 ref={questionHeading} tabIndex={-1} className="text-xl font-semibold outline-none">{QUESTIONS.find(question => question.id === revisitingQuestion)?.text}</h2>
@@ -558,10 +558,9 @@ export default function SolutionDiscovery({
               <p className="text-sm text-[var(--muted)]">Edit this answer, then continue forward. Your unsent answer on the current question is preserved.</p>
               <div className={styles.actions}>
                 <button type="submit" className={primary} disabled={busy || !correction.trim()}>{busy ? 'Saving…' : 'Save and continue'}</button>
-                <button type="button" className={secondary} disabled={busy} onClick={() => { revealQuestion.current = true; setRevisitingQuestion(null); setCorrection('') }}>Return to current question</button>
               </div>
             </form>}
-            {!revisitingQuestion && view.question && <form onSubmit={event => { event.preventDefault(); if (!answerTooLong) void sendAnswer(composedAnswer) }} className="space-y-4">
+            {!revisitingQuestion && view.question && <form onSubmit={event => { event.preventDefault(); if (!answerTooLong) void sendAnswer(composedAnswer) }} className={styles.questionForm}>
               <p className={styles.eyebrow}>Question {QUESTIONS.findIndex(question => question.id === view.question?.id) + 1} of {QUESTIONS.length}</p>
               <div className={styles.questionHeader}>
                 <h2 ref={questionHeading} tabIndex={-1} className="text-xl font-semibold outline-none">{view.question.text}</h2>
