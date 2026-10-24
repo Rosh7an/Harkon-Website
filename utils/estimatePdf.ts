@@ -1,5 +1,6 @@
 import { QUESTIONS, customerAnswers, discoveryReviewItems } from './discovery'
 import type { DiscoveryResponse } from './discoveryDraft'
+import { estimatePricing } from './estimatePricing'
 
 interface PdfOptions { logo?: Uint8Array; date?: Date }
 const INK = '#18263d'
@@ -28,6 +29,8 @@ export async function createEstimatePdf(view: DiscoveryResponse, options: PdfOpt
   const { session, result } = view
   const numbers = [result.lowEstimateCost, result.highEstimateCost, result.lowEstimateHours, result.highEstimateHours, result.hourlyRate, result.weeks.low, result.weeks.high, result.rawFeatureTotal, result.surcharge, result.setupOverhead, result.qaOverhead, result.pmOverhead, ...result.work.map(item => item.expectedHours)]
   if (numbers.some(value => !Number.isFinite(value) || value < 0) || result.lowEstimateCost > result.highEstimateCost || result.lowEstimateHours > result.highEstimateHours || result.weeks.low > result.weeks.high) throw new Error('The estimate contains invalid values. Please reopen your plan and retry.')
+  const pricing = estimatePricing(result.lowEstimateCost, result.highEstimateCost)
+  if (!result.pricing || Object.entries(pricing).some(([key, value]) => result.pricing[key as keyof typeof pricing] !== value)) throw new Error('The estimate pricing has changed. Please reopen your plan before downloading.')
   const date = options.date ?? new Date()
   if (!Number.isFinite(date.getTime())) throw new Error('The estimate date is invalid.')
   const dateLabel = date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -102,19 +105,24 @@ export async function createEstimatePdf(view: DiscoveryResponse, options: PdfOpt
   header(pageTitle)
 
   // A clearly labelled one-time build range, not an invoice or binding quotation.
-  pdf.setFillColor(INK); pdf.roundedRect(LEFT, y, WIDTH, 43, 3, 3, 'F')
+  pdf.setFillColor(INK); pdf.roundedRect(LEFT, y, WIDTH, 58, 3, 3, 'F')
   font(9, true, '#ffffff'); pdf.text(session.allowPartial ? 'PARTIAL ESTIMATE / INCLUDED BUILD WORK ONLY' : 'INDICATIVE ONE-TIME BUILD INVESTMENT', LEFT + 7, y + 10)
-  font(21, true, '#ffffff'); pdf.text(`${money(result.lowEstimateCost)} - ${money(result.highEstimateCost)}`, LEFT + 7, y + 23)
-  font(9, false, '#dce3eb'); pdf.text('Final scope, cost and delivery are confirmed with our team.', LEFT + 7, y + 34)
-  y += 51
+  const standardLabel = `Standard price: ${money(pricing.standardLow)} - ${money(pricing.standardHigh)}`
+  font(10, false, '#dce3eb'); pdf.text(standardLabel, LEFT + 7, y + 21)
+  pdf.setDrawColor('#dce3eb'); pdf.setLineWidth(0.3)
+  pdf.line(LEFT + 7, y + 20, LEFT + 7 + pdf.getTextWidth(standardLabel), y + 20)
+  font(8, true, '#ffffff'); pdf.text('PROMOTIONAL BUILD ESTIMATE / 28.6% OFF STANDARD', LEFT + 7, y + 29)
+  font(21, true, '#ffffff'); pdf.text(`${money(pricing.offerLow)} - ${money(pricing.offerHigh)}`, LEFT + 7, y + 40)
+  font(9, false, '#dce3eb'); pdf.text('Final scope, cost and delivery are confirmed with our team.', LEFT + 7, y + 51)
+  y += 66
   const cards = [
     ['ENGINEERING EFFORT', `${Math.round(result.lowEstimateHours)} - ${Math.round(result.highEstimateHours)} hours`],
     ['PLANNING WINDOW', `${result.weeks.low} - ${result.weeks.high} weeks`],
-    ['BASE ENGINEERING RATE', `${money(result.hourlyRate)} / hour`],
   ]
   cards.forEach(([label, value], index) => {
-    const x = LEFT + index * 60
-    pdf.setFillColor(PALE); pdf.roundedRect(x, y, 54, 25, 2, 2, 'F')
+    const cardWidth = (WIDTH - 6) / cards.length
+    const x = LEFT + index * (cardWidth + 6)
+    pdf.setFillColor(PALE); pdf.roundedRect(x, y, cardWidth, 25, 2, 2, 'F')
     font(7.5, true, MUTED); pdf.text(label, x + 4, y + 8)
     font(12, true); pdf.text(value, x + 4, y + 17)
   })
@@ -166,7 +174,7 @@ export async function createEstimatePdf(view: DiscoveryResponse, options: PdfOpt
   section('Next step: review with the team', [
     'This document is an AI-assisted preliminary estimate based on an initial study of the business information you provided. It is not a final quotation, invoice or agreement to deliver.',
     'Workflow details, integrations, user roles, existing data, security requirements, third-party costs and implementation complexity may change the final scope, price and delivery plan.',
-    'Speak with an Exter Cloud Solution Consultant through the consultation form, call, WhatsApp or email options on the estimate page. The consultant can re-evaluate the recommendation, remove unnecessary features, identify missing requirements, and decide what fits the current budget versus a later phase.',
+    'Call or WhatsApp an Exter Cloud Solution Consultant using the options on the estimate page. The consultant can re-evaluate the recommendation, remove unnecessary features, identify missing requirements, and decide what fits the current budget versus a later phase.',
   ])
   font(8, false, MUTED)
   if (y + 12 > BOTTOM) newPage()

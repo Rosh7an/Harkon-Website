@@ -1,4 +1,5 @@
 import { calculateEstimate, type FeatureDefinition } from './estimationEngine'
+import { estimatePricing } from './estimatePricing'
 import { HOURLY_RATE_INR, RISK_MULTIPLIERS, TIMELINE_MULTIPLIERS, getTimelineWeeks, isRiskProfile, isTimelineSpeed, type RiskProfile, type TimelineSpeed } from './pricingCatalog'
 
 export const SOLUTION_CATALOG_VERSION = 'discovery-v1-provisional'
@@ -163,10 +164,13 @@ export function resolveWork(scope: SolutionScope): FeatureDefinition[] {
 export function estimateSolution(scope: SolutionScope) {
   const work = resolveWork(scope)
   const result = calculateEstimate(work, {}, RISK_MULTIPLIERS[scope.riskProfile], HOURLY_RATE_INR, TIMELINE_MULTIPLIERS[scope.timelineSpeed])
+  const lowEstimateCost = Math.round(result.lowEstimateCost / 100) * 100
+  const highEstimateCost = Math.round(result.highEstimateCost / 100) * 100
   return {
     ...result,
-    lowEstimateCost: Math.round(result.lowEstimateCost / 100) * 100,
-    highEstimateCost: Math.round(result.highEstimateCost / 100) * 100,
+    lowEstimateCost,
+    highEstimateCost,
+    pricing: estimatePricing(lowEstimateCost, highEstimateCost),
     work: work.map(({ id, name, baseHoursRange }) => ({ id, name, expectedHours: (baseHoursRange.low + 4 * baseHoursRange.likely + baseHoursRange.high) / 6 })),
     weeks: getTimelineWeeks(result.lowEstimateHours, result.highEstimateHours, scope.timelineSpeed),
     hourlyRate: HOURLY_RATE_INR,

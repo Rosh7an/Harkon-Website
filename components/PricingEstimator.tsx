@@ -3,10 +3,11 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
 import QueryModal from './QueryModal'
 import AISpecChat from './AISpecChat'
+import EstimatePrice from './EstimatePrice'
+import { estimatePricing } from '@/utils/estimatePricing'
 import type { EstimationResult, FeatureDefinition } from '../utils/estimationEngine'
 import {
   FEATURE_BY_ID,
-  HOURLY_RATE_INR,
   PROJECT_BY_ID,
   RISK_MULTIPLIERS,
   TIMELINE_MULTIPLIERS,
@@ -464,6 +465,7 @@ export default function PricingEstimator() {
 
   const lowEstimate = Math.round(estimate.lowEstimateCost / 100) * 100
   const highEstimate = Math.round(estimate.highEstimateCost / 100) * 100
+  const pricing = useMemo(() => estimatePricing(lowEstimate, highEstimate), [lowEstimate, highEstimate])
 
   const standardWeeks = getTimelineWeeks(estimate.lowEstimateHours, estimate.highEstimateHours, 'standard')
   const expeditedWeeks = getTimelineWeeks(estimate.lowEstimateHours, estimate.highEstimateHours, 'expedited')
@@ -500,15 +502,16 @@ export default function PricingEstimator() {
       }
     }
     text += `Estimated Budget: ₹${lowEstimate.toLocaleString()} - ₹${highEstimate.toLocaleString()}\n`
+    text += `Standard Build Price: ₹${pricing.standardLow.toLocaleString('en-IN')} - ₹${pricing.standardHigh.toLocaleString('en-IN')}\nPromotional offer: 28.6% off the standard build price\n`
     text += `Estimated Effort: ${Math.round(estimate.lowEstimateHours)} - ${Math.round(estimate.highEstimateHours)} hours\n`
     text += `Delivery Speed: ${timelineSpeed ? `${timelineSpeed === 'expedited' ? 'Expedited' : 'Standard'} (${selectedWeeks.low}-${selectedWeeks.high} weeks)` : 'None selected'}\n`
     text += `Risk Profile: ${riskProfile} (${riskMultiplier.toFixed(1)}x)\n`
-    text += `Pricing Basis: ₹${HOURLY_RATE_INR.toLocaleString('en-IN')}/hour${timelineSpeed === 'expedited' ? ' with 25% priority uplift' : ''}\n`
+    if (timelineSpeed === 'expedited') text += 'Priority delivery: 25% uplift included in the estimate\n'
     if (aiSpecs) {
       text += `\nArchitect Blueprint Specs:\n${aiSpecs}`
     }
     return text
-  }, [activeFeatureOptions, aiSpecs, estimate.highEstimateHours, estimate.lowEstimateHours, followUpAnswers, highEstimate, lowEstimate, riskMultiplier, riskProfile, selectedProject, selectedWeeks.high, selectedWeeks.low, timelineSpeed])
+  }, [activeFeatureOptions, aiSpecs, estimate.highEstimateHours, estimate.lowEstimateHours, followUpAnswers, highEstimate, lowEstimate, pricing.standardLow, pricing.standardHigh, riskMultiplier, riskProfile, selectedProject, selectedWeeks.high, selectedWeeks.low, timelineSpeed])
 
   const scrollToSection = () => {
     if (!sectionRef.current) return
@@ -535,6 +538,12 @@ export default function PricingEstimator() {
         scale: 2,
         useCORS: true,
         backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#070E15',
+        // Exports always use the final offer, even during the on-screen reveal.
+        onclone: document => {
+          document.querySelectorAll<HTMLElement>('[data-price-final]').forEach(element => {
+            element.textContent = element.dataset.priceFinal ?? element.textContent
+          })
+        },
       })
       
       const imgData = canvas.toDataURL('image/png')
@@ -586,7 +595,7 @@ export default function PricingEstimator() {
                 </span>
               </div>
               <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[var(--accent)]/10 border border-[var(--accent)]/30 text-[var(--accent)] text-xs font-bold font-mono" role="status" aria-atomic="true">
-                <span>ESTIMATED:</span>
+                <span>OFFER ESTIMATE:</span>
                 <span>
                   {estimateStatus === 'loading' ? 'Updating…' : estimateStatus === 'error' ? 'Unavailable' : `₹${lowEstimate.toLocaleString()} – ₹${highEstimate.toLocaleString()}`}
                 </span>
@@ -814,13 +823,10 @@ export default function PricingEstimator() {
               {/* Total Highlight Card */}
               <div className="p-6 rounded-2xl bg-gradient-to-br from-[var(--accent)]/15 via-[var(--panel)] to-[var(--surface)] border border-[var(--accent)]/30 text-center sm:text-left flex flex-col sm:flex-row items-center justify-between gap-6 shadow-lg">
                 <div>
-                  <span className="text-xs font-mono text-[var(--accent)] uppercase tracking-wider font-semibold">Total Estimated Budget</span>
-                  <div className="text-3xl sm:text-4xl font-extrabold text-[var(--text)] mt-1 font-mono">
-                    ₹{lowEstimate.toLocaleString()} – ₹{highEstimate.toLocaleString()}
-                  </div>
+                  <EstimatePrice pricing={pricing} />
                   <p className="text-xs text-[var(--muted)] mt-1">Includes UI design, full-stack development, QA testing, and cloud setup. Hosting, domains, licenses, and recurring services are scoped separately.</p>
                   <p className="text-xs text-[var(--muted)] mt-2">
-                    {Math.round(estimate.lowEstimateHours)}–{Math.round(estimate.highEstimateHours)} engineering hours · ₹{HOURLY_RATE_INR.toLocaleString('en-IN')}/hour
+                    {Math.round(estimate.lowEstimateHours)}–{Math.round(estimate.highEstimateHours)} engineering hours
                     {timelineSpeed === 'expedited' ? ' · 25% priority uplift' : ''}
                   </p>
                   <p className="text-xs text-[var(--muted)] mt-1">
@@ -897,10 +903,6 @@ export default function PricingEstimator() {
                     <div className="px-5 py-3 flex justify-between text-xs font-mono">
                       <span className="text-[var(--muted)]">Planning Range</span>
                       <span className="text-[var(--text)]">{estimate.lowEstimateHours.toFixed(1)}–{estimate.highEstimateHours.toFixed(1)} hrs</span>
-                    </div>
-                    <div className="px-5 py-3 flex justify-between text-xs font-mono">
-                      <span className="text-[var(--muted)]">Hourly Rate</span>
-                      <span className="text-[var(--text)]">₹{HOURLY_RATE_INR.toLocaleString('en-IN')}/hr</span>
                     </div>
                   </div>
                 )}

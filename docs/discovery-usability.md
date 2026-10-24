@@ -11,9 +11,36 @@ to do next. This assessment is based on interface inspection, not a customer stu
 
 ## Changes
 
-- Three visible stages: tell us, review the plan, see the estimate. Conversation
-  progress follows captured topics, including explicit uncertainty; it is not a
-  confidence score or a declaration that every requirement is known.
+- Each completed screen has equal weight: guided discovery has seven questions,
+  three selection pages, final review and the returned estimate (12 steps). Manual
+  planning has the three selection pages, final review and estimate (5 steps).
+  Conditional payment/CRM details stay on their existing page, so they do not
+  change the denominator. Requirement answers, including explicit uncertainty,
+  count as addressed questions, not as confirmed knowledge.
+- Three numbered milestones mark actual boundaries: Requirements at 7/12 in guided
+  mode (1/5 in manual), Your solution at 10/12 (3/5 in manual), Estimate at 100%.
+  Markers and labels share those exact horizontal positions on the bar. On small
+  guided layouts, labels stagger vertically in order to prevent overlap; the last
+  label aligns inward at the endpoint. The visible header shows Section 1/2/3 of
+  3; percentages still count completed screens equally rather than thirds.
+- A rounded non-scrolling outer frame clips the main panel's inner scrollbar at
+  both corners. Mobile panels keep natural page scrolling instead of nested fixed
+  height scrolling; the desktop panel retains its stable height.
+- Clicking Continue completes a selection page; toggling more features does not.
+  Going back preserves completed pages, while changing a selection invalidates
+  that page and later selection completion. This count is stored with each draft;
+  old drafts infer completed pages from their saved page. Required partial consent
+  and final approval jointly complete review, and only a confirmed server result
+  completes the estimate step. This is workflow progress, never engineering hours,
+  a confidence score or a declaration that every requirement is known.
+- Discovery requests retry a connection failure or HTTP 502/503/504 once using the
+  same serialized snapshot. Aborts, validation failures and rate limits do not retry.
+  Successful responses are validated before changing the current panel, so malformed
+  data leaves the existing question, inputs and draft intact.
+- The active form does not repeat the initial mode selector. Collapsed plan
+  options expose a Resume action only if the other approach has a saved draft;
+  starting fresh is explicitly separate. Recovery also retains access to the
+  other saved approach without discarding its inputs.
 - Outcome-first choice labels: an online workspace, customer follow-ups, staff
   logins and website search setup. Canonical IDs and pricing rules are unchanged.
 - Connections and extra needs use an optional disclosure, with a selected count.

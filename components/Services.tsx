@@ -194,7 +194,7 @@ export default function Services() {
       style={{ background: 'var(--bg)', position: 'relative' }}
     >
       {/* Animated wrapper — height:100% inherits from .svc-section */}
-      <div style={{ display: 'flex', flexDirection: 'row', height: '100%', alignItems: 'stretch' }}>
+      <div className="svc-layout">
       {/* ── LEFT PANEL ── */}
       <div
         className="hidden lg:flex"
@@ -253,7 +253,7 @@ export default function Services() {
         </div>
 
         {/* Inner carousel area — fills remaining height */}
-        <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
+        <div className="svc-carousel">
 
         {/* Prev arrow — overlaps left edge of carousel */}
         <button
@@ -290,7 +290,7 @@ export default function Services() {
         </div>
 
         {/* Slide track */}
-        <div style={{ display: 'flex', height: '100%', transition: 'transform .7s cubic-bezier(.22,.8,.32,1)', transform: `translateX(-${active * 100}%)` }}>
+        <div className="svc-track" style={{ transform: `translateX(-${active * 100}%)` }}>
           {SERVICES.map((s, i) => (
             <div key={s.num} className="svc-card-panel">
               {/* Orb */}

@@ -20,6 +20,7 @@
   --text-rgb: 245,243,238;
   --grid-rgb: 255,255,255;
   --font: var(--font-bricolage), 'Bricolage Grotesque', system-ui, sans-serif;
+  --site-header-height: calc(76px + env(safe-area-inset-top, 0px));
 }
 
 /* ── ROOT TOKENS (light) ── */
@@ -47,7 +48,7 @@ html { scroll-behavior: smooth; overflow-x: hidden; }
 
 /* ── SCROLL OFFSET: clears the fixed nav so sections land below it, not hidden behind it ── */
 #hero, #about, #services, #process, #stats, #pricing, #cta {
-  scroll-margin-top: 88px;
+  scroll-margin-top: calc(var(--site-header-height) + 12px);
 }
 body {
   background: var(--bg);
@@ -98,6 +99,55 @@ body {
 }
 
 /* ── HERO ── */
+.site-nav {
+  min-height: var(--site-header-height);
+  padding: calc(16px + env(safe-area-inset-top, 0px)) clamp(16px, 4vw, 40px) 16px;
+  gap: 16px;
+}
+.page-with-nav { padding-top: calc(var(--site-header-height) + 20px); }
+.nav-logo { min-width: 44px; min-height: 44px; flex-shrink: 0; }
+.nav-desktop { gap: clamp(12px, 1.8vw, 28px); list-style: none; align-items: center; margin: 0; padding: 0; }
+.nav-desktop button { min-height: 44px; white-space: nowrap; }
+.mobile-menu {
+  position: fixed;
+  inset: 0;
+  z-index: 490;
+  flex-direction: column;
+  align-items: center;
+  height: 100vh;
+  height: 100dvh;
+  padding: calc(var(--site-header-height) + 16px) 24px calc(24px + env(safe-area-inset-bottom, 0px));
+  background: var(--bg);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.mobile-menu-links { display: flex; flex-direction: column; align-items: center; gap: clamp(8px, 2svh, 24px); margin-block: auto; flex-shrink: 0; max-width: 100%; }
+.mobile-menu-links button { min-height: 44px; max-width: 100%; overflow-wrap: anywhere; }
+.hero-section {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100svh;
+  padding-top: var(--site-header-height);
+  overflow: hidden;
+}
+.hero-content {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(28px, 5svh, 64px) clamp(16px, 4vw, 24px);
+}
+.hero-badge { display: inline-flex; max-width: 100%; line-height: 1.6; text-wrap: balance; }
+.hero-actions > button { min-height: 44px; justify-content: center; max-width: 100%; }
+.hero-stats { flex-shrink: 0; }
+@media (max-width: 480px) {
+  .hero-actions { flex-direction: column; max-width: 320px; margin-inline: auto; }
+}
 .type-cursor {
   display: inline-block;
   width: 3px; height: 0.85em;
@@ -174,6 +224,9 @@ body {
   height: 100vh;
   min-height: 600px;
 }
+.svc-layout { display: flex; height: 100%; align-items: stretch; }
+.svc-carousel { flex: 1; min-height: 0; overflow: hidden; position: relative; }
+.svc-track { display: flex; height: 100%; transition: transform .7s cubic-bezier(.22,.8,.32,1); }
 @supports (height: 100svh) {
   .svc-section { height: 100svh; }
 }
@@ -189,6 +242,8 @@ body {
 }
 .svc-card-panel {
   min-width: 100%;
+  max-width: 100%;
+  flex-shrink: 0;
   height: 100%;
   padding: clamp(60px,8vh,110px) clamp(32px,6vw,80px) clamp(90px,10vh,120px);
   display: flex;
@@ -302,11 +357,12 @@ button, a, [role="button"] {
 /* ── TABLET/MOBILE: show service tab row (hidden at lg+) ── */
 @media (max-width: 1023px) {
   .svc-tab-row { display: flex; }
-}
-
-/* ── TABLET: cap services height ── */
-@media (min-width: 769px) and (max-width: 1023px) {
-  .svc-section { height: 660px !important; min-height: 0 !important; }
+  .svc-section { height: auto; min-height: 0; }
+  .svc-layout, .svc-track { height: auto; }
+  .svc-card-panel { height: auto; min-height: 540px; padding: 36px 24px 112px; justify-content: flex-start; }
+  .svc-prev-btn { left: 16px !important; top: auto !important; bottom: 20px !important; transform: none !important; }
+  .svc-next-btn { right: 16px !important; top: auto !important; bottom: 20px !important; transform: none !important; }
+  .svc-dot-row-wrap { bottom: 70px; left: 50%; transform: translateX(-50%); }
 }
 
 /* ── HERO: stats strip ── */
@@ -328,7 +384,6 @@ button, a, [role="button"] {
 /* ── MOBILE ≤768px ── */
 @media (max-width: 768px) {
   .snav { display: none; }
-  .svc-section { height: 660px !important; min-height: 0 !important; }
 
   /* Process 3D cards */
   .proc-card        { width: 186px; height: 256px; padding: 18px 14px; }

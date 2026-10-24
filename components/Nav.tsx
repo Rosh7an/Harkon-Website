@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Image from 'next/image'
 import ThemeToggle from '@/components/ThemeToggle'
@@ -19,21 +19,39 @@ export default function Nav() {
   const pathname = usePathname()
   const [scrolled,    setScrolled]    = useState(false)
   const [mobileOpen,  setMobileOpen]  = useState(false)
+  const menuButton = useRef<HTMLButtonElement>(null)
+  const mobileMenu = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 50)
+    onScroll()
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
 
-  // Lock body scroll when mobile menu is open
+  // Keep a tall menu scrollable without moving the page underneath it.
   useEffect(() => {
-    if (mobileOpen) {
-      document.body.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = ''
+    if (!mobileOpen) return
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    mobileMenu.current?.querySelector('button')?.focus()
+    const onResize = () => { if (window.innerWidth >= 1024) setMobileOpen(false) }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { setMobileOpen(false); menuButton.current?.focus() }
+      if (event.key !== 'Tab') return
+      const controls = [menuButton.current, ...Array.from(mobileMenu.current?.querySelectorAll<HTMLButtonElement>('button') ?? [])].filter((control): control is HTMLButtonElement => control !== null)
+      const first = controls[0]
+      const last = controls[controls.length - 1]
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus() }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus() }
     }
-    return () => { document.body.style.overflow = '' }
+    window.addEventListener('resize', onResize)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener('resize', onResize)
+      document.removeEventListener('keydown', onKeyDown)
+    }
   }, [mobileOpen])
 
   const scrollTo = (id: string) => {
@@ -59,16 +77,17 @@ export default function Nav() {
     <>
       <nav
         id="nav"
+        className="site-nav"
+        aria-label="Main navigation"
         style={{
           position:         'fixed',
           top: 0, left: 0, right: 0,
           zIndex:           500,
-          padding:          '16px clamp(16px,4vw,40px)',
           display:          'flex',
           alignItems:       'center',
           justifyContent:   'space-between',
           transition:       'all 0.4s ease',
-          background:       scrolled ? 'var(--bg)' : 'transparent',
+          background:       scrolled || mobileOpen ? 'var(--bg)' : 'transparent',
           borderBottom:     scrolled ? '1px solid var(--border)' : 'none',
           backdropFilter:   'none',
           WebkitBackdropFilter: 'none',
@@ -78,6 +97,7 @@ export default function Nav() {
         <button
           onClick={() => scrollTo('hero')}
           aria-label="Exter Cloud — Home"
+          className="nav-logo"
           style={{ display: 'flex', alignItems: 'center', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
         >
           <Image src="/logo-lockup-ondark.png" alt="" width={1330} height={882} priority className="show-on-dark" style={{ height: 44, width: 'auto' }} />
@@ -85,8 +105,7 @@ export default function Nav() {
         </button>
 
         {/* Desktop links */}
-        <ul style={{ gap: 28, listStyle: 'none', alignItems: 'center', margin: 0, padding: 0 }}
-            className="hidden md:flex">
+        <ul className="nav-desktop hidden lg:flex">
           {NAV_LINKS.map(({ label, id }) => (
             <li key={id}>
               <button
@@ -113,13 +132,16 @@ export default function Nav() {
 
         {/* Right cluster: theme toggle (always visible) + hamburger (mobile only) */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <ThemeToggle />
+          <ThemeToggle style={{ width: 44, height: 44 }} />
 
           <button
+            ref={menuButton}
             onClick={() => setMobileOpen(!mobileOpen)}
             aria-label="Menu"
-            className="flex md:hidden flex-col gap-1.5 items-center justify-center relative w-8 h-8"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, margin: '-4px' }}
+            aria-expanded={mobileOpen}
+            aria-controls="mobile-navigation"
+            className="flex lg:hidden flex-col gap-1.5 items-center justify-center relative w-11 h-11"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
           >
             {mobileOpen ? (
               <span style={{ fontSize: 28, color: 'var(--text)', lineHeight: 1 }}>✕</span>
@@ -137,8 +159,14 @@ export default function Nav() {
       {/* Mobile overlay */}
       {mobileOpen && (
         <div
-          style={{ position: 'fixed', inset: 0, background: 'var(--bg)', zIndex: 490, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 32 }}
+          ref={mobileMenu}
+          id="mobile-navigation"
+          className="mobile-menu flex lg:hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Mobile navigation"
         >
+          <div className="mobile-menu-links">
           {NAV_LINKS.map(({ label, id }) => (
             <button
               key={id}
@@ -156,6 +184,7 @@ export default function Nav() {
           >
             Get started
           </button>
+          </div>
         </div>
       )}
     </>

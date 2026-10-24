@@ -8,7 +8,7 @@ describe('customer-facing discovery presentation', () => {
     expect(discoveryProgress(null)).toMatchObject({ step: 1, percent: 0, topics: 0 })
     const start = createDiscovery('guided')
     const answered = recordAnswer(start, 'A local shop')
-    expect(discoveryProgress(answered)).toMatchObject({ step: 1, percent: 10, topics: 1 })
+    expect(discoveryProgress(answered)).toMatchObject({ step: 1, percent: 5, topics: 1 })
     expect(discoveryProgress({ ...answered, stage: 'confirmed' }, { hasResult: true })).toMatchObject({ step: 3, percent: 100 })
   })
   it('keeps uncertainty and early-review missing details visible', () => {

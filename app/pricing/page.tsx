@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 export default function PricingPage() {
   const contactLinks = businessContactLinks({ phone: process.env.CONTACT_PHONE || undefined, whatsapp: process.env.NEXT_PUBLIC_WHATSAPP_PHONE })
   return (
-    <main className="min-h-screen pt-24 pb-16 bg-[var(--bg)] text-[var(--text)]">
+    <main className="page-with-nav min-h-screen pb-16 bg-[var(--bg)] text-[var(--text)]">
       <Nav />
       <SolutionDiscovery contactLinks={contactLinks} />
       <Footer />
