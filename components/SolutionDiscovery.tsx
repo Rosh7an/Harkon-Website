@@ -4,12 +4,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 // Callback requests are paused while email delivery is unavailable.
 // import QueryModal from './QueryModal'
 import DiscoveryProgress from './DiscoveryProgress'
+import EstimatePrice from './EstimatePrice'
 import styles from './SolutionDiscovery.module.css'
 import { QUESTIONS, customerAnswers, discoveryReviewItems, type FactId } from '@/utils/discovery'
 import { CAPABILITIES, INTEGRATIONS, MODIFIERS, SURFACES, clearInactiveAnswers, emptyScope, reviewScope, scopeDependencyIssues, type ScopeDependencyIssue, type SolutionScope } from '@/utils/solutionCatalog'
 import { CAPABILITY_CHOICES, INTEGRATION_CHOICES, MODIFIER_CHOICES, SURFACE_CHOICES, customerWording } from '@/utils/discoveryPresentation'
 import { DRAFT_STORAGE_KEY, LEGACY_STORAGE_KEY, readDraftStore, type DiscoveryMode, type DiscoveryResponse, type DraftStore, type LocalDraft } from '@/utils/discoveryDraft'
 import { REVIEW_FIELDS, discoveryProgress, type PlanStep, type ReviewedFields } from '@/utils/discoveryProgress'
+import { RejectedSession, requestDiscovery } from '@/utils/discoveryRequest'
 import type { BusinessContactLinks } from '@/utils/businessContact'
 
 export type { DiscoveryResponse } from '@/utils/discoveryDraft'
@@ -24,16 +26,6 @@ function ContactIcon({ whatsapp = false }: { whatsapp?: boolean }) {
     {whatsapp ? <><path d="M21 11.5a8.5 8.5 0 0 1-12.7 7.4L3 21l1.8-5.4A8.5 8.5 0 1 1 21 11.5Z" /><path d="M8.2 7.8c.6 3.9 2.2 5.5 6.1 6.1l1.2-1.5-2-1-1 1c-1.3-.6-2-1.3-2.6-2.6l1-1-1-2-1.7 1Z" /></> : <path d="m8 3 3 5-2 2a14 14 0 0 0 5 5l2-2 5 3c0 3-2 5-4 5C10 21 3 14 3 7c0-2 2-4 5-4Z" />}
   </svg>
 }
-class RejectedSession extends Error {}
-async function readResponse(response: Response): Promise<DiscoveryResponse> {
-  const data = await response.json()
-  if (!response.ok) {
-    if (response.status === 400 && data.code === 'DISCOVERY_SESSION_INVALID') throw new RejectedSession(data.error)
-    throw new Error(data.error || 'Could not save your discovery. Please retry.')
-  }
-  return data
-}
-
 function ScopeGroup({ title, catalog, selected, disabled, onToggle, hideLegend = false }: {
   title: string
   catalog: Record<string, { name: string; description: string }>
@@ -103,7 +95,8 @@ export function proposalSummary(view: DiscoveryResponse): string {
   lines.push(`Customer-system provider: ${!session.scope.integrationIds.includes('existing_crm') ? 'Not applicable — connection not selected' : session.scope.crmProvider === 'undecided' ? 'Not decided yet' : session.scope.crmProvider}`)
   if (reviewItems.length) lines.push(`${session.allowPartial ? 'Unresolved / excluded from partial estimate' : 'Unresolved — needs team review'}: ${reviewItems.join('; ')}`)
   if (result) lines.push(`Included priced work: ${result.work.map(item => item.name).join('; ')}`)
-  if (result) lines.push(`Indicative build range: ${money(result.lowEstimateCost)}–${money(result.highEstimateCost)}`, `Engineering hours: ${Math.round(result.lowEstimateHours)}–${Math.round(result.highEstimateHours)}`, `Rate: ${money(result.hourlyRate)}/hour${session.scope.timelineSpeed === 'expedited' ? ' plus 25% priority uplift' : ''}`, `Planning window: ${result.weeks.low}–${result.weeks.high} weeks, subject to team capacity and scope review`)
+  if (result) lines.push(`Standard build range: ${money(result.pricing.standardLow)}–${money(result.pricing.standardHigh)}`, 'Promotional offer: 28.6% off the standard build price.')
+  if (result) lines.push(`Indicative build range: ${money(result.lowEstimateCost)}–${money(result.highEstimateCost)}`, `Engineering hours: ${Math.round(result.lowEstimateHours)}–${Math.round(result.highEstimateHours)}${session.scope.timelineSpeed === 'expedited' ? '; 25% priority uplift included in the build range' : ''}`, `Planning window: ${result.weeks.low}–${result.weeks.high} weeks, subject to team capacity and scope review`)
   lines.push('Excluded recurring costs: hosting, domains, licenses, messaging, AI usage, maintenance, ongoing SEO/marketing and taxes. Final pricing requires team review.')
   return lines.join('\n')
 }
@@ -130,6 +123,7 @@ export default function SolutionDiscovery({
   // const [proposalOpen, setProposalOpen] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [planStep, setPlanStep] = useState<PlanStep>(0)
+  const [completedPlanSteps, setCompletedPlanSteps] = useState(0)
   const [reviewed, setReviewed] = useState<ReviewedFields>({})
   const [summaryOpen, setSummaryOpen] = useState(true)
   const [planOptionsOpen, setPlanOptionsOpen] = useState(false)
@@ -180,17 +174,17 @@ export default function SolutionDiscovery({
 
   const saveDraft = useCallback(() => {
     if (!view) return
-    drafts.current[view.session.mode] = { token: view.token, expiresAt: view.session.expiresAt, scope, answer, selectedOptions, editing, correction, planStep, reviewed }
+    drafts.current[view.session.mode] = { token: view.token, expiresAt: view.session.expiresAt, scope, answer, selectedOptions, editing, correction, planStep, completedPlanSteps, reviewed }
     views.current[view.session.mode] = view
     persistDrafts(view.session.mode)
-  }, [view, scope, answer, selectedOptions, editing, correction, planStep, reviewed, persistDrafts])
+  }, [view, scope, answer, selectedOptions, editing, correction, planStep, completedPlanSteps, reviewed, persistDrafts])
   const latestSaveDraft = useRef(saveDraft)
   useEffect(() => { latestSaveDraft.current = saveDraft }, [saveDraft])
 
   function retireSession(mode?: DiscoveryMode) {
     if (mode) {
       const local = drafts.current[mode]
-      if (local) drafts.current[mode] = { ...local, token: '', needsRestart: true, reviewed: {}, planStep: 0, editing: null, correction: '' }
+      if (local) drafts.current[mode] = { ...local, token: '', needsRestart: true, reviewed: {}, planStep: 0, completedPlanSteps: 0, editing: null, correction: '' }
       delete views.current[mode]
       if (currentView.current?.session.mode === mode) {
         currentView.current = null
@@ -216,6 +210,7 @@ export default function SolutionDiscovery({
     const acceptedEditing = local?.editing ?? null
     const acceptedCorrection = local?.correction ?? ''
     const acceptedStep = data.session.stage === 'confirmed' ? 3 : local?.planStep ?? 0
+    const acceptedCompletedSteps = data.session.stage === 'confirmed' ? 3 : local?.completedPlanSteps ?? local?.planStep ?? 0
     const acceptedReviewed = local?.reviewed ?? {}
     setScope(acceptedScope)
     setAnswer(acceptedAnswer)
@@ -223,6 +218,7 @@ export default function SolutionDiscovery({
     setEditing(acceptedEditing)
     setCorrection(acceptedCorrection)
     setPlanStep(acceptedStep)
+    setCompletedPlanSteps(acceptedCompletedSteps)
     setReviewed(acceptedReviewed)
     setApproved(false)
     setAllowPartial(false)
@@ -233,7 +229,7 @@ export default function SolutionDiscovery({
     setNotice('')
     setExtrasOpen(true)
     setRevisitingQuestion(null)
-    drafts.current[data.session.mode] = { token: data.token, expiresAt: data.session.expiresAt, scope: acceptedScope, answer: acceptedAnswer, selectedOptions: acceptedOptions, editing: acceptedEditing, correction: acceptedCorrection, planStep: acceptedStep, reviewed: acceptedReviewed }
+    drafts.current[data.session.mode] = { token: data.token, expiresAt: data.session.expiresAt, scope: acceptedScope, answer: acceptedAnswer, selectedOptions: acceptedOptions, editing: acceptedEditing, correction: acceptedCorrection, planStep: acceptedStep, completedPlanSteps: acceptedCompletedSteps, reviewed: acceptedReviewed }
     persistDrafts(data.session.mode)
   }
 
@@ -259,8 +255,7 @@ export default function SolutionDiscovery({
     const timer = setTimeout(() => controller.abort(), 25000)
     void (async () => {
       try {
-        const response = await fetch('/api/discovery', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'restore', token }), signal: controller.signal })
-        const data = await readResponse(response)
+        const data = await requestDiscovery({ action: 'restore', token }, controller.signal)
         if (expectedMode && data.session?.mode !== expectedMode) throw new Error('This saved draft belongs to another approach. Please start again.')
         if (active && !controller.signal.aborted) accept(data, local)
       } catch (failure) {
@@ -309,18 +304,14 @@ export default function SolutionDiscovery({
     const timer = setTimeout(() => controller.abort(), 25000)
     try {
       const current = currentView.current
-      const response = await fetch('/api/discovery', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
-        body: JSON.stringify({ token: current?.token, revision: current?.session.revision, ...payload }),
-      })
-      const data = await readResponse(response)
+      const data = await requestDiscovery({ token: current?.token, revision: current?.session.revision, ...payload }, controller.signal)
       if (!mounted.current || controller.signal.aborted) return false
       const mode = expectedMode ?? current?.session.mode
       if (mode && data.session?.mode !== mode) throw new Error('The approach changed unexpectedly. Your current draft is still here; please retry.')
       // A correction changes the requirements. Preserve unsent text/navigation,
       // but never let the old local scope overwrite the recomputed server plan.
       revealQuestion.current = true
-      accept(data, payload.action === 'edit' && local ? { ...local, scope: data.session.scope, reviewed: {} } : local)
+      accept(data, payload.action === 'edit' && local ? { ...local, scope: data.session.scope, reviewed: {}, completedPlanSteps: 0 } : local)
       return true
     } catch (failure) {
       if (mounted.current) {
@@ -340,7 +331,7 @@ export default function SolutionDiscovery({
 
   async function startNewSession(mode: DiscoveryMode, keepInputs = false) {
     const saved = keepInputs ? drafts.current[mode] : undefined
-    const local: LocalDraft | undefined = saved ? { ...saved, reviewed: {}, planStep: 0, editing: null, correction: '' } : undefined
+    const local: LocalDraft | undefined = saved ? { ...saved, reviewed: {}, planStep: 0, completedPlanSteps: 0, editing: null, correction: '' } : undefined
     if (await request({ action: 'start', mode }, mode, local)) {
       if (saved) setNotice(mode === 'manual' ? 'New session started. Your saved choices are here as an unconfirmed draft—please review them again.' : 'New guided session started. Your unsent answer is still here. Earlier submitted answers could not be restored; please answer the questions again.')
     }
@@ -376,6 +367,7 @@ export default function SolutionDiscovery({
     }
   }
   function toggle(group: 'surfaceIds' | 'capabilityIds' | 'integrationIds' | 'modifierIds', id: string) {
+    setCompletedPlanSteps(previous => Math.min(previous, group === 'surfaceIds' ? 0 : group === 'capabilityIds' ? 1 : 2))
     setScope(previous => {
       const ids = previous[group] as string[]
       return clearInactiveAnswers({ ...previous, [group]: ids.includes(id) ? ids.filter(value => value !== id) : [...ids, id] })
@@ -385,6 +377,7 @@ export default function SolutionDiscovery({
     setReviewed(previous => ({ ...previous, [group]: true, ...(id === 'payments' ? { billing: false } : {}), ...(id === 'existing_crm' ? { crmProvider: false } : {}) }))
   }
   function changePreference(preference: Partial<Pick<SolutionScope, 'billing' | 'crmProvider' | 'timelineSpeed' | 'riskProfile'>>) {
+    setCompletedPlanSteps(previous => Math.min(previous, 2))
     setScope(previous => clearInactiveAnswers({ ...previous, ...preference }))
     setApproved(false)
     setAllowPartial(false)
@@ -398,6 +391,7 @@ export default function SolutionDiscovery({
     if (planStep === 2 && reviewScope(scope).issues.length) return
     if (planStep === 2 && scope.capabilityIds.includes('payments') && scope.billing === 'undecided') return
     setReviewed(previous => ({ ...previous, ...(planStep === 0 ? { surfaceIds: true } : planStep === 1 ? { capabilityIds: true } : { integrationIds: true, modifierIds: true, billing: true, crmProvider: true, timelineSpeed: true, riskProfile: true }) }))
+    setCompletedPlanSteps(previous => Math.max(previous, Math.min(3, planStep + 1)))
     goToStep(Math.min(3, planStep + 1) as PlanStep)
   }
   function editSolution() {
@@ -406,7 +400,7 @@ export default function SolutionDiscovery({
     // questionnaire; accept() still clears approval and partial-estimate consent.
     const local: LocalDraft = {
       token: view.token, expiresAt: view.session.expiresAt, scope: view.session.scope,
-      answer: '', selectedOptions: [], editing: null, correction: '', planStep: 3,
+      answer: '', selectedOptions: [], editing: null, correction: '', planStep: 3, completedPlanSteps: 3,
       reviewed: Object.fromEntries(REVIEW_FIELDS.map(key => [key, true])),
     }
     void request({ action: 'review' }, view.session.mode, local, { preserveEstimateOnRejection: true })
@@ -417,7 +411,7 @@ export default function SolutionDiscovery({
   const result = view?.result
   const reviewItems = useMemo(() => session ? discoveryReviewItems(session, scope) : [], [session, scope])
   const showChoices = session?.mode === 'manual' && Object.keys(session.facts).length === 0
-  const progressInput = { scope, reviewed, approved, allowPartial, planStep, hasResult: !!result }
+  const progressInput = { scope, reviewed, approved, allowPartial, planStep, completedPlanSteps, hasResult: !!result }
   const progress = discoveryProgress(session ?? null, progressInput)
   const selectedChoices = [
     ...scope.surfaceIds.map(id => ({ name: SURFACE_CHOICES[id].name, excluded: !pricedScope.surfaceIds.includes(id) })),
@@ -458,7 +452,7 @@ export default function SolutionDiscovery({
     const nextAnsweredQuestion = QUESTIONS.slice(editedIndex + 1, currentQuestionIndex).find(question => session.facts[question.id])
     const local: LocalDraft = {
       token: view.token, expiresAt: session.expiresAt, scope, answer, selectedOptions,
-      editing: null, correction: '', planStep, reviewed,
+      editing: null, correction: '', planStep, completedPlanSteps, reviewed,
     }
     const saved = await request({ action: 'edit', field: revisitingQuestion, value: correction.trim() }, session.mode, local)
     if (!saved) return
@@ -515,6 +509,7 @@ export default function SolutionDiscovery({
       {recovery.invalid
         ? <button className={primary} disabled={busy || !ready} onClick={() => void startNewSession(recovery.mode ?? 'guided', true)}>Start a fresh {recovery.mode === 'manual' ? 'build-your-own' : 'guided'} plan</button>
         : <button className={primary} disabled={busy || !ready || (!recovery.token && !recovery.mode)} onClick={() => void retryRecovery()}>Try opening again</button>}
+      {(['guided', 'manual'] as const).filter(mode => mode !== recovery.mode && drafts.current[mode]).map(mode => <button key={mode} className={secondary} disabled={busy || !ready} onClick={() => void switchMode(mode)}>Resume saved {mode === 'guided' ? 'guided' : 'build-your-own'} plan</button>)}
     </div>}
     {notice && <p role="status" className="text-sm text-[var(--muted)] mb-6">{notice}</p>}
     {!ready && <p className="text-[var(--muted)]">Restoring your discovery…</p>}
@@ -537,19 +532,21 @@ export default function SolutionDiscovery({
           </button>
         </div>
         {planOptionsOpen && <div id="discovery-plan-options" className={styles.planOptions} role="group" aria-label="Start a new plan">
-          <p className="text-sm text-[var(--muted)]">Start from the beginning with either approach. This replaces the saved draft for the approach you choose.</p>
+          <p className="text-sm text-[var(--muted)]">New plans start from the beginning and replace only the draft for the approach you choose. Use Resume to keep an available saved plan.</p>
           <div className="flex flex-wrap gap-2">
+            {(['guided', 'manual'] as const).filter(mode => mode !== session.mode && drafts.current[mode]).map(mode => <button key={mode} className={secondary} disabled={busy} onClick={() => void switchMode(mode)}>Resume saved {mode === 'guided' ? 'guided' : 'build-your-own'} plan</button>)}
             <button type="button" className={secondary} disabled={busy} onClick={() => void startNewSession('guided')}>Start a new guided plan</button>
             <button type="button" className={secondary} disabled={busy} onClick={() => void startNewSession('manual')}>Start a new build-your-own plan</button>
           </div>
         </div>}
       </div>
       <div className={`${styles.workspace} ${!showSummary ? styles.workspaceSingle : ''}`} data-guided-workspace={session.mode === 'guided'}>
-        <div className={`${styles.glass} ${styles.questionPanel} space-y-4 min-w-0`} data-question-layout={session.stage === 'discovery'}>
+        <div className={`${styles.glass} ${styles.panelFrame} min-w-0`} data-planner-frame>
+        <div className={`${styles.questionPanel} space-y-4 min-w-0`} data-question-layout={session.stage === 'discovery'} role={session.stage === 'discovery' ? undefined : 'region'} aria-label={session.stage === 'discovery' ? undefined : 'Your solution plan'} tabIndex={session.stage === 'discovery' ? undefined : 0}>
           {session.stage === 'discovery' && <div ref={questionScroll} className={`${styles.questionScroll} space-y-4`} role="region" aria-label="Current question — scroll for more" tabIndex={0}>
             {session.turns > 0 && <details open className={styles.answerRecap} key={`${session.revision}:${revisitingQuestion ?? 'current'}`}><summary>What AI understood</summary><p>{customerWording(session.assistantMessage)}</p></details>}
             {session.providerStatus === 'guided_fallback' && session.turns > 0 && <p role="status" className="text-sm text-[var(--muted)]">Your answers are saved. AI suggestions are unavailable right now, but you can keep going and review your choices.</p>}
-            {revisitingQuestion && <form onSubmit={event => { event.preventDefault(); void saveRevisitedAnswer() }} className="space-y-4">
+            {revisitingQuestion && <form onSubmit={event => { event.preventDefault(); void saveRevisitedAnswer() }} className={styles.questionForm}>
               <p className={styles.eyebrow}>EARLIER QUESTION</p>
               <div className={styles.questionHeader}>
                 <h2 ref={questionHeading} tabIndex={-1} className="text-xl font-semibold outline-none">{QUESTIONS.find(question => question.id === revisitingQuestion)?.text}</h2>
@@ -561,10 +558,10 @@ export default function SolutionDiscovery({
               <p className="text-sm text-[var(--muted)]">Edit this answer, then continue forward. Your unsent answer on the current question is preserved.</p>
               <div className={styles.actions}>
                 <button type="submit" className={primary} disabled={busy || !correction.trim()}>{busy ? 'Saving…' : 'Save and continue'}</button>
-                <button type="button" className={secondary} disabled={busy} onClick={() => { revealQuestion.current = true; setRevisitingQuestion(null); setCorrection('') }}>Return to current question</button>
               </div>
             </form>}
-            {!revisitingQuestion && view.question && <form onSubmit={event => { event.preventDefault(); if (!answerTooLong) void sendAnswer(composedAnswer) }} className="space-y-4">
+            {!revisitingQuestion && view.question && <form onSubmit={event => { event.preventDefault(); if (!answerTooLong) void sendAnswer(composedAnswer) }} className={styles.questionForm}>
+              <p className={styles.eyebrow}>Question {QUESTIONS.findIndex(question => question.id === view.question?.id) + 1} of {QUESTIONS.length}</p>
               <div className={styles.questionHeader}>
                 <h2 ref={questionHeading} tabIndex={-1} className="text-xl font-semibold outline-none">{view.question.text}</h2>
               </div>
@@ -606,6 +603,7 @@ export default function SolutionDiscovery({
               const checked = event.target.checked
               setScope(previous => clearInactiveAnswers({ ...previous, capabilityIds: [] }))
               setReviewed(previous => ({ ...previous, capabilityIds: checked, billing: false }))
+              setCompletedPlanSteps(previous => Math.min(previous, 1))
               setApproved(false); setAllowPartial(false)
             }} /><span>No extra features for now<span className="block text-sm text-[var(--muted)] mt-1">Continue with just the places you chose.</span></span></label>
             <DependencyWarnings issues={dependencyIssues} busy={busy} onChoosePlace={() => goToStep(0)} onAddSurface={addCompatibleSurface} onRemove={removeDependencyIssue} />
@@ -672,10 +670,10 @@ export default function SolutionDiscovery({
             </div>
             {session.allowPartial && <div role="status" className="border border-[var(--border-hi)] p-4 rounded-xl text-sm">This range leaves out the items below. It is not the total project cost.<ul className="list-disc pl-5 mt-2">{reviewItems.map(item => <li key={item}>{customerWording(item)}</li>)}</ul></div>}
             <div className={styles.preliminaryNotice} role="note"><h3>Preliminary estimate—not a final quotation</h3><p>This range comes from an initial AI-assisted study of the business information you provided. Workflow details, integrations, existing data, security needs and implementation complexity can change the final scope, price and delivery plan.</p><p>An Exter Cloud Solution Consultant can review the recommendation with you, remove unnecessary work, identify missing requirements and decide what fits the current budget versus a later phase.</p></div>
-            <p className={`${styles.price} font-extrabold`}>{money(result.lowEstimateCost)}–{money(result.highEstimateCost)}</p>
+            <EstimatePrice pricing={result.pricing} />
             <p>Estimated time: {result.weeks.low}–{result.weeks.high} weeks. We’ll confirm availability and the details with you.</p>
             <p className="text-sm text-[var(--muted)]">This is a starting estimate, not a final quote. Hosting, domains, licenses, messaging, AI use, maintenance, ongoing marketing and taxes are separate.</p>
-            <details className={styles.disclosure}><summary>What’s included and how we calculated it</summary><p className="text-sm text-[var(--muted)] mb-3">{Math.round(result.lowEstimateHours)}–{Math.round(result.highEstimateHours)} engineering hours · {money(result.hourlyRate)}/hour{session.scope.timelineSpeed === 'expedited' ? ' + 25% priority uplift' : ''}</p><ul className="divide-y divide-[var(--border)]">{result.work.map(item => <li key={item.id} className="py-3 flex justify-between gap-4 text-sm"><span className="min-w-0">{customerWording(item.name)}</span><span className="whitespace-nowrap">{item.expectedHours.toFixed(1)} base hrs</span></li>)}</ul><p className="mt-3 text-sm text-[var(--muted)]">Base work {result.rawFeatureTotal.toFixed(1)}h + integration coordination {result.surcharge.toFixed(1)}h + deployment setup {result.setupOverhead}h + QA {result.qaOverhead.toFixed(1)}h + project management {result.pmOverhead.toFixed(1)}h. The range then applies scope uncertainty and the selected risk profile.</p></details>
+            <details className={styles.disclosure}><summary>What’s included and how we calculated it</summary><p className="text-sm text-[var(--muted)] mb-3">{Math.round(result.lowEstimateHours)}–{Math.round(result.highEstimateHours)} engineering hours{session.scope.timelineSpeed === 'expedited' ? ' · 25% priority uplift included in the build range' : ''}</p><ul className="divide-y divide-[var(--border)]">{result.work.map(item => <li key={item.id} className="py-3 flex justify-between gap-4 text-sm"><span className="min-w-0">{customerWording(item.name)}</span><span className="whitespace-nowrap">{item.expectedHours.toFixed(1)} base hrs</span></li>)}</ul><p className="mt-3 text-sm text-[var(--muted)]">Base work {result.rawFeatureTotal.toFixed(1)}h + integration coordination {result.surcharge.toFixed(1)}h + deployment setup {result.setupOverhead}h + QA {result.qaOverhead.toFixed(1)}h + project management {result.pmOverhead.toFixed(1)}h. The range then applies scope uncertainty and the selected risk profile.</p></details>
             <div className="flex flex-wrap gap-3">
               {/* <button className={primary} onClick={openProposal}>Request a consultation</button> */}
               <button className={secondary} disabled={exporting} onClick={() => void exportEstimate()}>{exporting ? 'Preparing PDF…' : 'Download PDF estimate'}</button>
@@ -694,6 +692,7 @@ export default function SolutionDiscovery({
           </>}
         </div>
 
+        </div>
         {showSummary && <aside className={`${styles.glass} ${styles.summary} min-w-0`} data-expanded={summaryOpen} aria-label="Requirements understood so far">
           <div className={styles.summaryHeader}>
             <h2 className="font-semibold"><button className={`${styles.summaryToggle} ${secondary}`} aria-expanded={summaryOpen} aria-controls="discovery-summary-body" onClick={() => setSummaryOpen(previous => !previous)}><span>{showChoices ? 'Your selected plan' : 'What I’ve understood'} ({showChoices ? `${summaryCount} selected` : `${summaryCount} of ${QUESTIONS.length}`})</span><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d={summaryOpen ? 'm6 15 6-6 6 6' : 'm6 9 6 6 6-6'} /></svg></button></h2>

@@ -6,7 +6,7 @@ const pdfMock = vi.hoisted(() => ({ create: vi.fn(), save: vi.fn() }))
 vi.mock('../components/QueryModal', () => ({ default: modalMock }))
 vi.mock('../utils/estimatePdf', () => ({ createEstimatePdf: pdfMock.create }))
 import SolutionDiscovery, { proposalSummary, type DiscoveryResponse } from '../components/SolutionDiscovery'
-import { QUESTIONS, createDiscovery, nextQuestion } from '../utils/discovery'
+import { QUESTIONS, createDiscovery, nextQuestion, recordAnswer } from '../utils/discovery'
 import { emptyScope, estimateSolution, reviewScope } from '../utils/solutionCatalog'
 import { CONTACT_MESSAGE_MAX } from '../utils/contactLimits'
 import { DRAFT_STORAGE_KEY } from '../utils/discoveryDraft'
@@ -46,6 +46,9 @@ async function typeAnswer(value: string) {
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(textarea, value)
     textarea.dispatchEvent(new Event('input', { bubbles: true }))
   })
+  // The current planner debounces draft storage; wait for the persisted input
+  // before comparing snapshots across a failed request or a remount.
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 200)) })
 }
 function percent() { return container.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow') }
 beforeEach(async () => {
@@ -64,6 +67,108 @@ afterEach(async () => {
   vi.restoreAllMocks()
 })
 describe('discovery interface', () => {
+  it('keeps milestone labels visible and scopes question counts to the active panel', async () => {
+    let session = createDiscovery('guided')
+    const fetcher = vi.fn().mockImplementation(async (_url, options) => {
+      const body = JSON.parse(options.body)
+      if (body.action === 'answer') session = recordAnswer(session, body.answer)
+      return { ok: true, json: async () => ({ token: `token-${session.revision}`, session, question: nextQuestion(session), reviewItems: [], result: null }) }
+    })
+    vi.stubGlobal('fetch', fetcher)
+    await click(button('Guide me'))
+    const milestones = () => [...container.querySelectorAll('ol[aria-label="Steps to your estimate"] li')]
+    expect(milestones().map(item => item.textContent)).toEqual(['1Requirements — current', '2Plan Selection — upcoming', '3Estimate — upcoming'])
+    const stepLabel = [...container.querySelectorAll('p')].find(item => item.textContent === 'Step 1 of 3')!
+    expect(stepLabel.classList.contains('sr-only')).toBe(false)
+    const panel = container.querySelector('form')!
+    expect(panel.textContent).toContain('Question 1 of 7')
+    expect(container.querySelector('[role="progressbar"]')?.parentElement?.textContent).not.toContain('Question 1 of 7')
+    for (let index = 1; index <= 7; index++) {
+      await typeAnswer(`Business answer ${index}`)
+      await click(button('Continue'))
+      if (index === 3) expect(percent()).toBe('14')
+    }
+    expect(percent()).toBe('33')
+    expect(container.textContent).toContain('Step 2 of 3')
+    expect(milestones()[0].textContent).toBe('✓Requirements — completed')
+    expect(milestones()[1].getAttribute('aria-current')).toBe('step')
+    expect(container.textContent).not.toContain('Question 7 of 7')
+    await choosePlaces(); await chooseFeatures(); await review()
+    expect(container.textContent).toContain('Step 3 of 3')
+    expect(milestones()[1].textContent).toBe('✓Plan Selection — completed')
+    expect(milestones()[2].getAttribute('aria-current')).toBe('step')
+    await click(button('Edit features'))
+    expect(container.textContent).toContain('Step 2 of 3')
+    expect(milestones()[2].textContent).toBe('3Estimate — upcoming')
+  })
+  it.each([null, {}, { session: null }, 'not a response'])('preserves the question, draft and progress for malformed next-step data: %j', async data => {
+    const fetcher = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => response('guided') }).mockResolvedValueOnce({ ok: true, json: async () => data })
+    vi.stubGlobal('fetch', fetcher)
+    await click(button('Guide me'))
+    await typeAnswer('Keep this exact answer')
+    const before = sessionStorage.getItem(DRAFT_STORAGE_KEY)
+    await click(button('Continue'))
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('invalid response')
+    expect(container.querySelector('textarea')?.value).toBe('Keep this exact answer')
+    expect(container.querySelector('h2')?.textContent).toBe(QUESTIONS[0].text)
+    expect(percent()).toBe('0')
+    expect(button('Continue').disabled).toBe(false)
+    expect(sessionStorage.getItem(DRAFT_STORAGE_KEY)).toBe(before)
+  })
+  it('advances just one question after a failed request is retried', async () => {
+    const start = response('guided')
+    const session = recordAnswer(start.session, 'A small studio')
+    const next = { ...start, token: 'next-token', session, question: nextQuestion(session) }
+    const fetcher = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => start })
+      .mockRejectedValueOnce(new TypeError('Load failed')).mockResolvedValueOnce({ ok: true, json: async () => next })
+    vi.stubGlobal('fetch', fetcher)
+    await click(button('Guide me'))
+    await typeAnswer('A small studio')
+    await click(button('Continue'))
+    expect(container.querySelector('[role="alert"]')).toBeNull()
+    expect(container.querySelector('h2')?.textContent).toBe(QUESTIONS[1].text)
+    expect(container.querySelector('textarea')?.value).toBe('')
+    expect(container.textContent).toContain('Question 2 of 7')
+    expect(percent()).toBe('5')
+    expect(fetcher.mock.calls[1][1].body).toBe(fetcher.mock.calls[2][1].body)
+    expect(start.session.revision).toBe(0)
+    expect(start.session.facts).toEqual({})
+  })
+  it('preserves question four and three saved topics through Load failed, then retries the same snapshot', async () => {
+    let session = createDiscovery('guided')
+    let failures = 2
+    const fetcher = vi.fn().mockImplementation(async (_url, options) => {
+      const body = JSON.parse(options.body)
+      if (body.action === 'answer') {
+        if (session.revision === 3 && failures-- > 0) throw new TypeError('Load failed')
+        session = recordAnswer(session, body.answer)
+      }
+      return { ok: true, json: async () => ({ token: `token-${session.revision}`, session, question: nextQuestion(session), reviewItems: [], result: null }) }
+    })
+    vi.stubGlobal('fetch', fetcher)
+    await click(button('Guide me'))
+    for (const answer of ['We build mobile apps', 'Enquiries get lost', 'We use spreadsheets']) {
+      await typeAnswer(answer)
+      await click(button('Continue'))
+    }
+    const answer = 'Integrate APIs, test Android and iOS, deploy the app, and provide ongoing support.'
+    await typeAnswer(answer)
+    const before = sessionStorage.getItem(DRAFT_STORAGE_KEY)
+    await click(button('Continue'))
+    expect(container.querySelector('h2')?.textContent).toBe(QUESTIONS[3].text)
+    expect(container.querySelector('textarea')?.value).toBe(answer)
+    expect(container.textContent).toContain('Question 4 of 7')
+    expect(container.textContent).toContain('3 of 7 topics covered')
+    expect(percent()).toBe('14')
+    expect(sessionStorage.getItem(DRAFT_STORAGE_KEY)).toBe(before)
+    expect(session.revision).toBe(3)
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('Your current input is still here')
+    await click(button('Continue'))
+    expect(container.querySelector('h2')?.textContent).toBe(QUESTIONS[4].text)
+    expect(session.revision).toBe(4)
+    expect(session.messages.filter(message => message.role === 'user')).toHaveLength(4)
+    expect(fetcher.mock.calls.slice(-3).map(call => JSON.parse(call[1].body))).toEqual(Array(3).fill({ action: 'answer', token: 'token-3', revision: 3, answer }))
+  })
   it('downloads the confirmed server estimate and displays export failures', async () => {
     const confirmed = response('manual')
     confirmed.session.stage = 'confirmed'
@@ -130,7 +235,7 @@ describe('discovery interface', () => {
     await choosePlaces()
     await chooseFeatures()
     await review()
-    expect(percent()).toBe('90')
+    expect(percent()).toBe('67')
     expect(container.textContent).toContain('Your choices, including defaults you kept.')
     expect(container.textContent).not.toContain('not reported discovery answers')
     await click(input('I have reviewed'))
@@ -252,7 +357,7 @@ describe('discovery interface', () => {
     expect(button('Confirm my plan and see estimate').disabled).toBe(true)
   })
   it('shows a recoverable connection error and preserves the typed answer', async () => {
-    const fetcher = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => response('guided') }).mockRejectedValueOnce(new Error('Connection lost'))
+    const fetcher = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => response('guided') }).mockRejectedValue(new TypeError('Load failed'))
     vi.stubGlobal('fetch', fetcher)
     await click(button('Guide me'))
     const textarea = container.querySelector('textarea')!
@@ -261,7 +366,8 @@ describe('discovery interface', () => {
       textarea.dispatchEvent(new Event('input', { bubbles: true }))
     })
     await click(button('Continue'))
-    expect(container.querySelector('[role="alert"]')?.textContent).toBe('Connection lost')
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('Your current input is still here')
+    expect(fetcher).toHaveBeenCalledTimes(3)
     expect(textarea.value).toBe('A small studio')
   })
   it('labels unresolved items in proposal summaries and keeps scope-only pricing separate', () => {
@@ -283,10 +389,11 @@ describe('discovery interface', () => {
   it('announces progress without treating uncertain answers as confirmed requirements', async () => {
     const view = response('guided')
     view.session.facts.business = { value: 'I’m not sure yet', evidence: 'I’m not sure yet', status: 'unknown', source: 'answer' }
+    view.question = nextQuestion(view.session)
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => view }))
     await click(button('Guide me'))
     const progress = container.querySelector('[role="progressbar"]')!
-    expect(progress.getAttribute('aria-valuenow')).toBe('10')
+    expect(progress.getAttribute('aria-valuenow')).toBe('5')
     expect(progress.getAttribute('aria-valuetext')).toContain('needs clarification')
     expect(container.textContent).toContain('Let’s clarify this together')
     const summary = container.querySelector('[aria-label="Your answers — scroll to review"]')!
@@ -304,7 +411,7 @@ describe('discovery interface', () => {
     const whatsapp = [...optional.querySelectorAll('label')].find(item => item.textContent?.includes('WhatsApp connection'))?.querySelector('input')
     await click(whatsapp!)
     expect(optional.querySelector('summary')?.textContent).toContain('1 selected')
-    expect(percent()).toBe('50')
+    expect(percent()).toBe('48')
   })
 
   it('preserves independent progress, section and typed inputs across repeated switches', async () => {
@@ -316,12 +423,12 @@ describe('discovery interface', () => {
     await click(button('Build my own plan'))
     expect(percent()).toBe('0')
     await choosePlaces()
-    expect(percent()).toBe('20')
+    expect(percent()).toBe('33')
     await click(button('Guide me'))
     expect(percent()).toBe('0')
     expect(container.querySelector('textarea')?.value).toBe('A bakery with a small team')
     await click(button('Build my own plan'))
-    expect(percent()).toBe('20')
+    expect(percent()).toBe('33')
     expect(button('Continue to details')).toBeTruthy()
     expect(fetcher).toHaveBeenCalledTimes(2)
     const store = JSON.parse(sessionStorage.getItem(DRAFT_STORAGE_KEY)!)
@@ -338,10 +445,10 @@ describe('discovery interface', () => {
     await choosePlaces()
     expect(button('Continue to details').disabled).toBe(true)
     await chooseFeatures()
-    expect(percent()).toBe('40')
+    expect(percent()).toBe('43')
     expect([...container.querySelectorAll('select')].map(item => item.value)).toEqual(['standard', 'standard'])
     await review()
-    expect(percent()).toBe('90')
+    expect(percent()).toBe('67')
   })
 
   it('recovers unconfirmed local choices after server restore without restoring approval', async () => {
@@ -355,7 +462,7 @@ describe('discovery interface', () => {
     await act(async () => { root.unmount(); root = createRoot(container); root.render(<SolutionDiscovery />) })
     expect(JSON.parse(fetcher.mock.calls[1][1].body)).toEqual({ action: 'restore', token: 'manual-token' })
     expect(container.textContent).toContain('Public website')
-    expect(percent()).toBe('90')
+    expect(percent()).toBe('67')
     expect(input('I have reviewed').checked).toBe(false)
     expect(button('Confirm my plan and see estimate').disabled).toBe(true)
   })
@@ -391,6 +498,7 @@ describe('discovery interface', () => {
     expect(percent()).toBe('95')
     await click(button('Confirm my plan and see estimate'))
     expect(percent()).toBe('100')
+    expect([...container.querySelectorAll('ol[aria-label="Steps to your estimate"] li')].every(item => item.textContent?.startsWith('✓'))).toBe(true)
     expect(container.textContent).toContain('Your estimated project cost')
     await click(button('Guide me'))
     expect(container.querySelector('textarea')?.value).toBe('My saved draft')
@@ -429,7 +537,7 @@ describe('discovery interface', () => {
     await click(edit)
     expect(JSON.parse(fetcher.mock.calls[1][1].body).action).toBe('review')
     expect(container.querySelector('h2')?.textContent).toBe('Review your plan')
-    expect(percent()).toBe('90')
+    expect(percent()).toBe('67')
     expect(input('I have reviewed').checked).toBe(false)
     if (partial) expect(input('Leave these unanswered').checked).toBe(false)
     expect(container.textContent).not.toContain('Your estimated project cost')
@@ -448,11 +556,11 @@ describe('discovery interface', () => {
     initial.session.scope = { ...emptyScope(), surfaceIds: ['website'] }
     initial.session.stage = 'confirmed'
     initial.result = estimateSolution(initial.session.scope)
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: true, json: async () => initial }).mockRejectedValueOnce(new Error('Connection lost')))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: true, json: async () => initial }).mockRejectedValue(new TypeError('Load failed')))
     await click(button('Build my own plan'))
     await click(button('Edit solution'))
     expect(percent()).toBe('100')
-    expect(container.querySelector('[role="alert"]')?.textContent).toBe('Connection lost')
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('Your current input is still here')
     expect(container.textContent).toContain('Your estimated project cost')
     expect(button('Edit solution').disabled).toBe(false)
   })
@@ -465,13 +573,13 @@ describe('discovery interface', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => view }))
     await click(button('Guide me'))
     expect(input('Public website').checked).toBe(true)
-    expect(percent()).toBe('0')
+    expect(percent()).toBe('33')
     await click(button('Continue to features'))
     expect(input('Help customers find your website').checked).toBe(true)
-    expect(percent()).toBe('4')
+    expect(percent()).toBe('41')
     await click(button('Continue to details'))
     await review()
-    expect(percent()).toBe('90')
+    expect(percent()).toBe('67')
     expect(input('Leave these unanswered').checked).toBe(false)
   })
 
@@ -486,7 +594,7 @@ describe('discovery interface', () => {
     await click(button('Build my own plan'))
     await choosePlaces()
     await act(async () => { root.unmount(); root = createRoot(container); root.render(<SolutionDiscovery />) })
-    expect(percent()).toBe('20')
+    expect(percent()).toBe('33')
     await click(button('Guide me'))
     expect(container.querySelector('textarea')?.value).toBe('Saved in the other approach')
     expect(JSON.parse(fetcher.mock.calls[3][1].body)).toMatchObject({ action: 'restore', token: 'guided-token' })
@@ -586,14 +694,14 @@ describe('discovery interface', () => {
   })
 
   it('does not erase a saved draft or automatically start over for an outage', async () => {
-    const fetcher = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => response('manual') }).mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({ error: 'Temporarily unavailable' }) })
+    const fetcher = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => response('manual') }).mockResolvedValue({ ok: false, status: 503, json: async () => ({ error: 'Temporarily unavailable' }) })
     vi.stubGlobal('fetch', fetcher)
     await click(button('Build my own plan'))
     await choosePlaces()
     const before = sessionStorage.getItem(DRAFT_STORAGE_KEY)
     await remount()
     expect(sessionStorage.getItem(DRAFT_STORAGE_KEY)).toBe(before)
-    expect(fetcher).toHaveBeenCalledTimes(2)
+    expect(fetcher).toHaveBeenCalledTimes(3)
     expect(button('Start a new session').disabled).toBe(false)
     expect(container.querySelector('[role="alert"]')?.textContent).toContain('Temporarily unavailable')
   })

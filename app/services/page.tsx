@@ -6,7 +6,7 @@ export const metadata = { title: 'Services — Exter Cloud' }
 
 export default function ServicesPage() {
   return (
-    <div style={{ background: 'var(--bg)', minHeight: '100vh' }}>
+    <div className="page-with-nav" style={{ background: 'var(--bg)', minHeight: '100vh' }}>
       <Nav />
       <Services />
       <Footer />
