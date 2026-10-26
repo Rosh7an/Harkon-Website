@@ -1,0 +1,22 @@
+import type { Metadata } from 'next'
+import Nav from '@/components/Nav'
+import SolutionDiscovery from '@/components/SolutionDiscovery'
+import Footer from '@/components/Footer'
+import { businessContactLinks } from '@/utils/businessContact'
+
+export const metadata: Metadata = {
+  title: 'Cost Estimator — Exter Cloud',
+  alternates: { canonical: 'https://www.extercloud.in/cost-estimator' },
+  description: 'Discover the right solution for your business, review connected website, CRM, portal and mobile requirements, and estimate the confirmed scope.',
+}
+
+export default function CostEstimatorPage() {
+  const contactLinks = businessContactLinks({ phone: process.env.CONTACT_PHONE || undefined, whatsapp: process.env.NEXT_PUBLIC_WHATSAPP_PHONE })
+  return (
+    <main className="page-with-nav min-h-screen pb-16 bg-[var(--bg)] text-[var(--text)]">
+      <Nav />
+      <SolutionDiscovery contactLinks={contactLinks} />
+      <Footer />
+    </main>
+  )
+}

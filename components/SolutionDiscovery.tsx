@@ -599,9 +599,9 @@ export default function SolutionDiscovery({
     finally { setExporting(false) }
   }
 
-  return <section ref={sectionRef} className={styles.plannerSection} aria-label="Solution Planner">
+  return <section ref={sectionRef} className={styles.plannerSection} aria-label="Cost Estimator">
     <header className={styles.sectionHeading}>
-      <IntroHeading>A clear plan for your<br /> <span>next step.</span></IntroHeading>
+      <IntroHeading>Cost <span>Estimator</span></IntroHeading>
       <p>Start with what’s slowing you down. We’ll help you decide what to build—no technical knowledge needed.</p>
     </header>
     <div className={styles.experience} data-active={!!session}>

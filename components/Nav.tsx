@@ -11,7 +11,7 @@ const NAV_LINKS = [
   { label: 'Services', id: 'services' },
   { label: 'Process',  id: 'process'  },
   { label: 'Results',  id: 'stats'    },
-  { label: 'Solution Planner',  id: 'pricing'  },
+  { label: 'Cost Estimator', id: '/cost-estimator' },
 ]
 
 export default function Nav() {
@@ -61,7 +61,7 @@ export default function Nav() {
       router.push(id)
       return
     }
-    // On /pricing (or any non-home page), section links should navigate home first
+    // On a non-home page, section links should navigate home first
     if (pathname !== '/') {
       router.push('/#' + id)
       return
