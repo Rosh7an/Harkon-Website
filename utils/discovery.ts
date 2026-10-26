@@ -1,6 +1,7 @@
-import { CAPABILITIES, INTEGRATIONS, MODIFIERS, SURFACES, SOLUTION_CATALOG_VERSION, emptyScope, isRecord, parseIds, reviewScope, type SolutionScope } from './solutionCatalog'
+import { CAPABILITIES, INTEGRATIONS, MODIFIERS, SURFACES, SOLUTION_CATALOG_VERSION, clearInactiveAnswers, emptyScope, isRecord, parseIds, reviewScope, type CapabilityId, type SolutionScope } from './solutionCatalog'
 import { reconcileRequestedSurfaces, surfaceClarifications } from './discoverySurfaceIntent'
 import { workflowRecommendations } from './discoveryWorkflowIntent'
+import type { AIReviewFailure, AIReviewProviderDetails } from './discoveryAIStatus'
 
 export const DISCOVERY_VERSION = 1
 export const MAX_DISCOVERY_TURNS = 8
@@ -30,11 +31,16 @@ export interface DiscoverySession {
   answers?: Partial<Record<FactId, string>>
   messages: DiscoveryMessage[]
   recommendations: Recommendation[]
+  capabilityExclusions?: { id: CapabilityId; evidence: string }[]
   reviewItems: string[]
   scope: SolutionScope
   allowPartial: boolean
   assistantMessage: string
   providerStatus: 'available' | 'guided_fallback'
+  aiReviewFailure?: AIReviewFailure
+  aiReviewFailureReference?: string
+  aiReviewFailureDetails?: AIReviewProviderDetails
+  pendingAIReview?: { field: FactId; action: 'answer' | 'edit' }
 }
 export class DiscoveryValidationError extends Error {}
 // Exports keep the customer's words rather than substituting an AI summary.
@@ -66,10 +72,17 @@ function reconcileRequirements(session: DiscoverySession): DiscoverySession {
   if (session.mode !== 'guided') return session
   const requested = reconcileRequestedSurfaces(session, QUESTIONS)
   const recommendations = workflowRecommendations(originalRequirementAnswers(requested), requested.recommendations)
-  return reconcileRequestedSurfaces({ ...requested, recommendations, scope: { ...requested.scope,
+  const reconciled = reconcileRequestedSurfaces({ ...requested, recommendations, scope: { ...requested.scope,
     surfaceIds: requested.scope.surfaceIds.filter(id => !requested.recommendations.some(item => item.group === 'surfaceIds' && item.id === id) || recommendations.some(item => item.group === 'surfaceIds' && item.id === id)),
     capabilityIds: [...new Set([...requested.scope.capabilityIds.filter(id => !requested.recommendations.some(item => item.group === 'capabilityIds' && item.id === id)), ...recommendations.filter(item => item.group === 'capabilityIds').map(item => item.id as SolutionScope['capabilityIds'][number])])],
   } }, QUESTIONS)
+  const answers = originalRequirementAnswers(reconciled).map(answer => answer.text)
+  const capabilityExclusions = (session.capabilityExclusions ?? []).filter(item => answers.some(answer => answer.includes(item.evidence)))
+  const excluded = new Set(capabilityExclusions.map(item => item.id))
+  return { ...reconciled, capabilityExclusions,
+    recommendations: reconciled.recommendations.filter(item => item.group !== 'capabilityIds' || !excluded.has(item.id as CapabilityId)),
+    scope: clearInactiveAnswers({ ...reconciled.scope, capabilityIds: reconciled.scope.capabilityIds.filter(id => !excluded.has(id)) }),
+  }
 }
 export function isFactId(value: unknown): value is FactId {
   return typeof value === 'string' && QUESTIONS.some(question => question.id === value)
@@ -89,7 +102,11 @@ export function createDiscovery(mode: 'guided' | 'manual', now = Date.now()): Di
     providerStatus: 'guided_fallback',
   }
 }
+export function requiresAIReview(session: DiscoverySession): boolean {
+  return session.mode === 'guided' && session.stage !== 'confirmed' && session.providerStatus === 'guided_fallback' && !!session.aiReviewFailure
+}
 export function nextQuestion(session: DiscoverySession) {
+  if (requiresAIReview(session) && session.pendingAIReview) return QUESTIONS.find(question => question.id === session.pendingAIReview!.field) ?? null
   if (session.stage !== 'discovery' || session.turns >= MAX_DISCOVERY_TURNS) return null
   return QUESTIONS.find(question => !Object.hasOwn(session.facts, question.id)) ?? null
 }
@@ -97,10 +114,14 @@ export function missingCriticalFacts(session: DiscoverySession): string[] {
   if (session.mode === 'manual') return []
   return QUESTIONS.filter(question => ['pain', 'workflow', 'users', 'constraints'].includes(question.id) && (!session.facts[question.id] || session.facts[question.id]?.status === 'unknown')).map(question => `${question.label} still needs confirmation.`)
 }
+// Older encrypted drafts stored an AI outage as an unresolved requirement.
+// Provider availability is separate from unresolved customer requirements.
+export function requirementReviewItems(items: string[]): string[] {
+  return items.filter(item => !item.startsWith('AI scope mapping was unavailable.'))
+}
 export function manualReviewItems(session: DiscoverySession): string[] {
   const facts = Object.values(session.facts).map(fact => fact?.value ?? '').join(' ')
-  const items = [...session.reviewItems, ...missingCriticalFacts(session), ...(session.mode === 'guided' ? surfaceClarifications(session, QUESTIONS) : [])]
-  if (session.mode === 'guided' && session.providerStatus === 'guided_fallback') items.push('AI scope mapping was unavailable. The team must check that the selected catalogue work covers your stated requirements.')
+  const items = [...requirementReviewItems(session.reviewItems), ...missingCriticalFacts(session), ...(session.mode === 'guided' ? surfaceClarifications(session, QUESTIONS) : [])]
   if (/\b(migrat\w*|legacy|hipaa|gdpr|pci|compliance|regulated|medical records|banking|multi[- ]tenant|multi[- ]organization)\b/i.test(facts)) items.push('Data migration, regulated data, or complex existing-system requirements need human scoping.')
   return [...new Set(items)]
 }
@@ -126,6 +147,7 @@ export interface AgentOutput {
   acknowledgment: string
   facts: { field: FactId; value: string; evidence: string }[]
   recommendations: Recommendation[]
+  excludedCapabilities?: { id: CapabilityId; evidence: string }[]
   reviewItems: { text: string; evidence: string }[]
 }
 const recommendationCatalogs = { surfaceIds: SURFACES, capabilityIds: CAPABILITIES, integrationIds: INTEGRATIONS, modifierIds: MODIFIERS }
@@ -136,10 +158,22 @@ export function validateAgentOutput(value: unknown, answer: string, currentAnswe
   if (!Array.isArray(value.facts) || value.facts.length > QUESTIONS.length || !Array.isArray(value.recommendations) || value.recommendations.length > 25 || !Array.isArray(value.reviewItems) || value.reviewItems.length > 8) throw new DiscoveryValidationError('The assistant returned invalid discovery data.')
   const facts: AgentOutput['facts'] = []
   for (const entry of value.facts) {
-    if (!isRecord(entry) || !isFactId(entry.field) || facts.some(fact => fact.field === entry.field)) throw new DiscoveryValidationError('The assistant returned invalid fact fields.')
+    if (!isRecord(entry) || !isFactId(entry.field)) throw new DiscoveryValidationError('The assistant returned invalid fact fields.')
     const evidence = boundedText(entry.evidence)
     if (!evidenceSources.some(source => source.includes(evidence))) throw new DiscoveryValidationError('A fact has no supporting customer evidence.')
-    facts.push({ field: entry.field, value: boundedText(entry.value, 600), evidence })
+    const value = boundedText(entry.value, 600)
+    const previous = facts.find(fact => fact.field === entry.field)
+    if (previous) {
+      // A model may split staff and manager details into the same topic twice.
+      // Merge only when one original answer supports both quotes; the evidence
+      // stays an exact contiguous substring, never a fabricated combined quote.
+      const source = evidenceSources.find(text => text.includes(previous.evidence) && text.includes(evidence))
+      if (!source) throw new DiscoveryValidationError('Repeated facts need evidence from the same customer answer.')
+      const start = Math.min(source.indexOf(previous.evidence), source.indexOf(evidence))
+      const end = Math.max(source.indexOf(previous.evidence) + previous.evidence.length, source.indexOf(evidence) + evidence.length)
+      previous.evidence = source.slice(start, end)
+      previous.value = previous.value === value ? value : boundedText(`${previous.value}; ${value}`, 600)
+    } else facts.push({ field: entry.field, value, evidence })
   }
   const recommendations: Recommendation[] = []
   for (const entry of value.recommendations) {
@@ -156,7 +190,21 @@ export function validateAgentOutput(value: unknown, answer: string, currentAnswe
     if (!evidenceSources.some(source => source.includes(evidence))) throw new DiscoveryValidationError('A review item has no customer evidence.')
     return { text: boundedText(entry.text, 300), evidence }
   })
-  return { acknowledgment, facts, recommendations, reviewItems }
+  // Optional for existing fixtures/callers; the provider schema requires this
+  // field. A missing mention is never treated as a customer withdrawal.
+  const excludedCapabilities: NonNullable<AgentOutput['excludedCapabilities']> = []
+  if (value.excludedCapabilities !== undefined) {
+    if (!Array.isArray(value.excludedCapabilities) || value.excludedCapabilities.length > Object.keys(CAPABILITIES).length) throw new DiscoveryValidationError('The assistant returned invalid capability exclusions.')
+    for (const entry of value.excludedCapabilities) {
+      if (!isRecord(entry)) throw new DiscoveryValidationError('The assistant returned an invalid capability exclusion.')
+      const [id] = parseIds([entry.id], CAPABILITIES, 'Capability exclusion')
+      const evidence = boundedText(entry.evidence, 300)
+      if (!evidenceSources.some(source => source.includes(evidence))) throw new DiscoveryValidationError('A capability exclusion has no supporting customer evidence.')
+      if (excludedCapabilities.some(item => item.id === id) || recommendations.some(item => item.group === 'capabilityIds' && item.id === id)) throw new DiscoveryValidationError('The assistant returned conflicting capability decisions.')
+      excludedCapabilities.push({ id, evidence })
+    }
+  }
+  return { acknowledgment, facts, recommendations, excludedCapabilities, reviewItems }
 }
 export function applyAgentOutput(session: DiscoverySession, output: AgentOutput): DiscoverySession {
   const facts = { ...session.facts }
@@ -167,7 +215,12 @@ export function applyAgentOutput(session: DiscoverySession, output: AgentOutput)
   // Omission by the model is not a customer withdrawal. Keep still-supported
   // suggestions, but never validate against stale summaries of replaced answers.
   const recommendations = supportedRecommendations(session, [...session.recommendations, ...output.recommendations])
-  const updated = { ...session, facts, recommendations, reviewItems: [...new Set([...session.reviewItems, ...output.reviewItems.map(item => item.text)])], assistantMessage: output.acknowledgment, providerStatus: 'available' as const }
+  const excludedCapabilities = output.excludedCapabilities ?? []
+  const capabilityExclusions = [
+    ...(session.capabilityExclusions ?? []).filter(item => !excludedCapabilities.some(excluded => excluded.id === item.id) && !recommendations.some(recommended => recommended.group === 'capabilityIds' && recommended.id === item.id)),
+    ...excludedCapabilities,
+  ]
+  const updated = { ...session, facts, recommendations, capabilityExclusions, reviewItems: [...new Set(requirementReviewItems([...session.reviewItems, ...output.reviewItems.map(item => item.text)]))], assistantMessage: output.acknowledgment, providerStatus: 'available' as const, aiReviewFailure: undefined, aiReviewFailureReference: undefined, aiReviewFailureDetails: undefined, pendingAIReview: undefined }
   // The server, never the model, decides when to stop questioning.
   if (!nextQuestion(updated)) updated.stage = 'review'
   const scope = { ...session.scope }

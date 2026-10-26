@@ -1,0 +1,13 @@
+import type { CapabilityId } from './solutionCatalog'
+
+// Covers the entire capability catalogue. Interpret business intent in any
+// language; these are decision guidelines, not keyword-matching rules.
+export const DISCOVERY_CAPABILITY_POLICY = {
+  crm: 'Include for organising enquiries, customer records, lead ownership, or follow-ups. Future workflow statements such as "Our team will then use an internal CRM" or "We need to use a CRM" request CRM functionality in the proposed solution: recommend crm and a compatible staff interface. The word internal does not prove that a CRM already exists. Present-tense ownership or use, such as "We already use an internal CRM", describes an existing tool; only recommend existing_crm integration when connection or sync is requested. Explicit existing-tool wording takes precedence over future tense, as in "We will use our existing CRM". Respect refusals and later-phase wishes.',
+  seo: 'Include when the public website needs search visibility: being found on Google, organic search enquiries, indexing, search metadata or technical SEO setup. A request for a website alone does not request advanced SEO. Ongoing campaigns and ranking guarantees are outside this feature.',
+  accounts: 'Include for customer or staff sign-in, private workspaces, individual accounts, or role-based access and permissions. Staff using a system is not by itself a request for company SSO. Recommend a compatible portal, admin or mobile interface according to who signs in and what they do.',
+  booking: 'Include when customers or staff need to book, schedule, reschedule or manage slots, visits or appointments. Booking alone does not imply online payments.',
+  payments: 'Include for taking online payments or subscriptions. Keep billing undecided until the customer chooses one-time or recurring payments. A payment problem is a need to solve, not a refusal of payments.',
+  reports: 'Include for business reports, operational summaries, sales or booking totals, performance dashboards, or staff activity reporting. A management interface alone does not imply reports. A request to see this project estimate is not a reporting feature.',
+  ai: 'Include for a specific requested AI task, such as answering customer questions, searching business documents, drafting replies, summarising records or classifying enquiries. Ordinary workflow automation does not necessarily require AI; do not select the ai capability merely because this planner uses AI. Unbounded autonomous actions or an unclear AI task need team clarification.',
+} satisfies Record<CapabilityId, string>

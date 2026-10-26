@@ -1,6 +1,7 @@
 import { isFactId, type DiscoverySession, type FactId, type nextQuestion } from './discovery'
 import { isRecord, parseScope, type SolutionEstimate, type SolutionScope } from './solutionCatalog'
 import { REVIEW_FIELDS, type PlanStep, type ReviewedFields } from './discoveryProgress'
+import type { AIReviewOutcome } from './discoveryAIStatus'
 
 export type DiscoveryMode = DiscoverySession['mode']
 export interface DiscoveryResponse {
@@ -9,6 +10,7 @@ export interface DiscoveryResponse {
   question: ReturnType<typeof nextQuestion>
   reviewItems: string[]
   result: SolutionEstimate | null
+  aiReview?: AIReviewOutcome
 }
 export interface LocalDraft {
   token: string

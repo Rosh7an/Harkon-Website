@@ -13,6 +13,7 @@ export interface ProgressInput {
   hasResult?: boolean
   planStep?: PlanStep
   completedPlanSteps?: number
+  reviewingRequirements?: boolean
 }
 
 // Count complete, contiguous selection pages. Feature quantity and engineering
@@ -34,7 +35,7 @@ export function discoveryProgress(session: DiscoverySession | null, input: Progr
   const uncertain = session ? QUESTIONS.filter(question => session.facts[question.id]?.status === 'unknown').length : 0
   const scope = input.scope === undefined ? session?.scope ?? emptyScope() : input.scope
   const done = !!session && session.stage === 'confirmed' && input.hasResult === true
-  const step = !session || session.stage === 'discovery' ? 1
+  const step = !session || session.stage === 'discovery' || (session.mode === 'guided' && input.reviewingRequirements) ? 1
     : session.stage === 'confirmed' || input.planStep === 3 ? 3
       : session.mode === 'manual' && (input.planStep ?? 0) === 0 ? 1 : 2
   const questionSteps = session?.mode === 'manual' ? 0 : QUESTIONS.length
@@ -61,6 +62,7 @@ export function discoveryProgress(session: DiscoverySession | null, input: Progr
         : 'Each completed planning page counts equally. Choosing more features does not increase progress.'
   const next = !session ? 'Choose how you want to build your plan.'
     : done ? 'Call or WhatsApp a consultant, or edit your plan.'
+      : input.reviewingRequirements ? 'Review your saved answers, then select Your solution to return to planning.'
       : session.stage === 'discovery' ? 'Answer the next question and select Continue.'
         : input.planStep === 3 ? 'Review exclusions, approve your plan and request an estimate.'
           : input.planStep === 2 ? 'Review connections, applicable details and planning assumptions.'

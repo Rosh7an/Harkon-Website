@@ -19,15 +19,18 @@ export function workflowRecommendations(answers: WorkflowAnswer[], existing: Rec
   const uncertain = /\b(?:maybe|might|not sure|unsure|perhaps|later|future)\b/i
   const desired = /\b(?:wants?|needs?|should|will|would|can|cannot|can['’]t|unable|start|allow|let|enable|build|requires?|looking for|struggl(?:e|es|ing)|lost|losing|missed|difficult(?:y|ies)?|not able)\b/i
   const booking = /\b(?:book(?=\s+(?:online|or pay))|(?:to|cannot|can['’]t|can)\s+book|book(?:ing)?\s+(?:(?:a|an|the|their|our|my)\s+)?(?:slots?|appointments?|consultations?|visits?|services?|tables?|tastings?)|(?:slot|appointment|consultation)\s+(?:booking|scheduling)|bookings?(?:\s+and\s+scheduling)?|schedule\s+(?:(?:a|an|the)\s+)?appointments?)\b/i
-  const crm = /\b(?:track(?:ing)?\s+(?:(?:our|my|the)\s+)?(?:customers?|leads?|enquiries|inquiries)|follow[- ]?ups?|lead (?:management|generation)|crm)\b/i
+  const crm = /\b(?:track(?:ing)?\s+(?:(?:our|my|the)\s+)?(?:customers?|leads?|enquiries|inquiries)|(?:customer|lead|enquiry|inquiry)\s+tracking|follow[- ]?ups?|lead (?:management|generation)|crm)\b/i
   const payments = /\b(?:book(?:ing)?\s+(?:and|or)\s+pay(?:ments?)?|payments?|checkout|pay\s+online|(?:cannot|can['’]t|struggle\s+to)\s+pay)\b/i
   for (const answer of answers) {
     for (const clause of answer.text.split(/[.!?;\n]+|\s+(?:but|however|instead)\s+/i)) {
+      // Not owning a CRM is different from declining one. Keep offsets intact
+      // so recommendation evidence remains an exact quote from the answer.
+      const intentClause = clause.replace(/\b(?:(?:do not|don['’]t|never)\s+(?:currently\s+)?(?:have|use|own)\s+(?:(?:an?|the|our|my)\s+)?(?:existing\s+)?crm|no\s+(?:existing\s+)?crm)\b/gi, match => ' '.repeat(match.length))
       const historical = answer.field === 'current' || /\b(?:already|currently|today|existing)\b/i.test(clause)
       for (const [id, pattern] of [['booking', booking], ['crm', crm], ['payments', payments]] as const) {
-        const match = pattern.exec(clause)
+        const match = pattern.exec(id === 'crm' ? intentClause : clause)
         if (!match) continue
-        const before = clause.slice(0, match.index)
+        const before = (id === 'crm' ? intentClause : clause).slice(0, match.index)
         const after = clause.slice(match.index + match[0].length)
         // Inability is a problem to solve, not a withdrawal of the feature.
         const intentPrefix = before.replace(/not only|not able(?: to)?/gi, '')
@@ -36,7 +39,11 @@ export function workflowRecommendations(answers: WorkflowAnswer[], existing: Rec
         if (declined) { decisions.set(id, { include: false, evidence }); continue }
         if (uncertain.test(clause)) continue
         // Using or connecting an existing CRM is not permission to build one.
-        if (id === 'crm' && /\b(?:connect|sync|integrat\w*|existing|already|use|using)\b/i.test(clause) && !/\b(?:build|custom|replace)\b/i.test(clause)) {
+        const plannedCRMUse = /\b(?:will|would|wants?|needs?|plans?|intend(?:s)?)\b[^.!?;]*\b(?:use|using|have)\b/i.test(before)
+        const explicitlyExistingCRM = /\b(?:connect|sync|integrat\w*)\b[^.!?;]*\bcrm\b|\b(?:existing|current|already|currently|today)\b[^.!?;]*\bcrm\b/i.test(intentClause)
+        const ownsOrUsesCRM = /\b(?:use|uses|using|have|has|own|owns)\s+(?:(?:an?|the|our|my)\s+)?(?:internal\s+)?crm\b/i.test(intentClause)
+        const existingCRM = explicitlyExistingCRM || (ownsOrUsesCRM && !plannedCRMUse)
+        if (id === 'crm' && existingCRM && !/\b(?:build|custom|replace)\b/i.test(intentClause)) {
           decisions.set(id, { include: false, evidence })
           continue
         }

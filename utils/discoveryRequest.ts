@@ -1,10 +1,11 @@
 import { DISCOVERY_VERSION, isFactId, nextQuestion, type DiscoverySession } from './discovery'
 import type { DiscoveryResponse } from './discoveryDraft'
 import { SOLUTION_CATALOG_VERSION, isRecord, parseScope, type SolutionScope } from './solutionCatalog'
+import { aiReviewHttpStatus, isAIReviewFailure } from './discoveryAIStatus'
 
 export class RejectedSession extends Error {}
 const invalidResponse = 'The server returned an invalid response. Your current input is still here; please retry.'
-const connectionError = 'Could not reach the server. Your current input is still here; check your connection and retry.'
+const connectionError = 'Network connection problem. We couldn’t complete the request to the server. Your current input is still here; check your connection and retry.'
 const unavailable = 'Discovery is temporarily unavailable. Your current input is still here; please retry.'
 const strings = (value: unknown): value is string[] => Array.isArray(value) && value.every(item => typeof item === 'string')
 const nonnegative = (value: unknown) => typeof value === 'number' && Number.isFinite(value) && value >= 0
@@ -15,6 +16,12 @@ const oneOf = (value: unknown, options: readonly string[]) => typeof value === '
 function validateResponse(value: unknown): DiscoveryResponse {
   if (!isRecord(value) || typeof value.token !== 'string' || !value.token || !isRecord(value.session) || !strings(value.reviewItems)) throw new Error(invalidResponse)
   const session = value.session
+  if (value.aiReview !== undefined) {
+    const review = value.aiReview
+    if (!isRecord(review) || !oneOf(review.status, ['not_requested', 'succeeded', 'failed']) || typeof review.requestId !== 'string' || !review.requestId || review.requestId.length > 100) throw new Error(invalidResponse)
+    if (review.status === 'failed' && (!isAIReviewFailure(review.reason) || session.providerStatus !== 'guided_fallback' || session.aiReviewFailure !== review.reason)) throw new Error(invalidResponse)
+    if (review.status === 'succeeded' && session.providerStatus !== 'available') throw new Error(invalidResponse)
+  }
   if (!oneOf(session.mode, ['guided', 'manual']) || !oneOf(session.stage, ['discovery', 'review', 'confirmed'])
     || !nonnegative(session.revision) || !Number.isInteger(session.revision) || !nonnegative(session.turns) || !Number.isInteger(session.turns)
     || !nonnegative(session.expiresAt) || session.catalogVersion !== SOLUTION_CATALOG_VERSION || session.version !== DISCOVERY_VERSION
@@ -54,7 +61,6 @@ export async function requestDiscovery(payload: Record<string, unknown>, signal:
       throw new Error(connectionError)
     }
     signal.throwIfAborted()
-    if (!response.ok && [502, 503, 504].includes(response.status) && attempt === 0) continue
     let data: unknown
     try { data = await response.json() } catch (failure) {
       signal.throwIfAborted()
@@ -66,6 +72,14 @@ export async function requestDiscovery(payload: Record<string, unknown>, signal:
     }
     signal.throwIfAborted()
     if (!response.ok) {
+      if (isRecord(data) && data.code === 'DISCOVERY_AI_REVIEW_FAILED') {
+        // The answer was accepted and a new signed snapshot exists. Do not
+        // replay it or discard it just because the downstream AI failed.
+        const saved = validateResponse(data)
+        if (!['answer', 'edit', 'retry_ai'].includes(String(payload.action)) || saved.aiReview?.status !== 'failed' || response.status !== aiReviewHttpStatus(saved.aiReview.reason)) throw new Error(invalidResponse)
+        return saved
+      }
+      if ([502, 503, 504].includes(response.status) && attempt === 0) continue
       const message = isRecord(data) && typeof data.error === 'string' && data.error ? data.error : unavailable
       if (response.status === 400 && isRecord(data) && data.code === 'DISCOVERY_SESSION_INVALID') throw new RejectedSession(message)
       throw new Error(message)
