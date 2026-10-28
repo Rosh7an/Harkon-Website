@@ -1,6 +1,7 @@
+import { migrateBatchCollection, prepareBatchReview } from '@/utils/discoveryBatch'
 import { NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
-import { QUESTIONS, applyAgentOutput, boundedText, createDiscovery, DiscoveryValidationError, discoveryReviewItems, editFact, nextQuestion, originalRequirementAnswers, recordAnswer, requirementReviewItems, requiresAIReview, type DiscoverySession } from '@/utils/discovery'
+import { QUESTIONS, applyAgentOutput, boundedText, createDiscovery, customerAnswers, DiscoveryValidationError, discoveryReviewItems, editFact, nextQuestion, originalRequirementAnswers, recordAnswer, requirementReviewItems, requiresAIReview, type DiscoverySession } from '@/utils/discovery'
 import { aiReviewFailureMessage, aiReviewFailureReason, aiReviewHttpStatus, aiReviewProviderDetails, retrySecondsRemaining, type AIReviewOutcome } from '@/utils/discoveryAIStatus'
 import { requestedSurfaceIntents } from '@/utils/discoverySurfaceIntent'
 import { consult } from '@/utils/discoveryAgent.server'
@@ -67,13 +68,36 @@ export async function POST(req: Request) {
     if (!isRecord(body)) throw new DiscoveryValidationError('Request must be an object.')
     if (body.action === 'start') {
       if (body.mode !== 'guided' && body.mode !== 'manual') throw new DiscoveryValidationError('Choose guided discovery or manual selection.')
-      return respond(createDiscovery(body.mode))
+      return respond({ ...createDiscovery(body.mode), ...(body.mode === 'guided' ? { reviewMode: 'batch' as const } : {}) })
     }
     const session = openSession(body.token)
-    if (body.action === 'restore') return respond(session)
+    if (body.action === 'restore') {
+      if (session.mode === 'guided' && session.stage === 'discovery' && !session.reviewMode && customerAnswers(session).size < QUESTIONS.length) {
+        return respond(migrateBatchCollection(session))
+      }
+      return respond(session)
+    }
     if (body.revision !== session.revision) throw new DiscoveryValidationError('This response is out of date. Reload your saved discovery.')
-    if (requiresAIReview(session) && ['answer', 'edit', 'review', 'confirm'].includes(String(body.action))) return NextResponse.json({ code: 'DISCOVERY_AI_REVIEW_REQUIRED', error: 'Retry AI review successfully before continuing. Your saved answers are preserved.', requestId }, { status: 409, headers: { 'Cache-Control': 'no-store' } })
+    if (requiresAIReview(session) && ['answer', 'edit', 'review', 'confirm', 'review_answers'].includes(String(body.action))) return NextResponse.json({ code: 'DISCOVERY_AI_REVIEW_REQUIRED', error: 'Retry AI review successfully before continuing. Your saved answers are preserved.', requestId }, { status: 409, headers: { 'Cache-Control': 'no-store' } })
+    if (body.action === 'review_answers') {
+      if (session.mode !== 'guided' || session.stage !== 'discovery') throw new DiscoveryValidationError('Collect guided answers before requesting AI review.')
+      let updated: DiscoverySession
+      try { updated = prepareBatchReview(session, body.answers) }
+      catch (error) { throw new DiscoveryValidationError(error instanceof Error ? error.message : 'Invalid requirement answers.') }
+      const answer = updated.answers!.priority!
+      try {
+        const output = await consult(updated, answer)
+        if (output) updated = applyAgentOutput(updated, output)
+        else { updated.providerStatus = 'guided_fallback'; reportAIReviewFailure(updated, undefined, requestId, { field: 'priority', action: 'answer' }) }
+      } catch (error) {
+        updated.providerStatus = 'guided_fallback'
+        reportAIReviewFailure(updated, error, requestId, { field: 'priority', action: 'answer' })
+      }
+      return respond(updated, { requestId, aiAttempted: true })
+    }
+    if (session.reviewMode === 'batch' && session.providerStatus !== 'available' && ['review', 'confirm'].includes(String(body.action))) throw new DiscoveryValidationError('Complete AI review of all seven answers before continuing.')
     if (body.action === 'retry_ai') {
+      if (session.reviewMode === 'batch' && QUESTIONS.some(question => !session.answers?.[question.id])) throw new DiscoveryValidationError('Complete all seven answers before AI review.')
       const answer = session.pendingAIReview ? session.answers?.[session.pendingAIReview.field] ?? session.facts[session.pendingAIReview.field]?.evidence : originalRequirementAnswers(session).at(-1)?.text
       if (session.mode !== 'guided' || session.stage === 'confirmed' || !answer) throw new DiscoveryValidationError('Save a guided answer before retrying AI review.')
       const remaining = retrySecondsRemaining(session.aiReviewFailureDetails?.retryAt)
@@ -96,6 +120,7 @@ export async function POST(req: Request) {
       const answer = boundedText(body.answer)
       const field = nextQuestion(session)?.id
       let updated = recordAnswer(session, answer)
+      if (session.reviewMode === 'batch' && nextQuestion(updated)) return respond(updated)
       try {
         const output = await consult(updated, answer)
         if (output) updated = applyAgentOutput(updated, output)
@@ -119,6 +144,7 @@ export async function POST(req: Request) {
       const draftSession = session.stage === 'review' && body.scope !== undefined ? { ...session, scope: parseScope(body.scope) } : session
       let updated = editFact(draftSession, body.field, answer)
       const field = QUESTIONS.find(question => question.id === body.field)?.id
+      if (session.reviewMode === 'batch' && session.stage === 'discovery') return respond(updated)
       try {
         const output = await consult(updated, answer)
         if (output) updated = applyAgentOutput(updated, output)

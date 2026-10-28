@@ -40,6 +40,7 @@ export interface DiscoverySession {
   aiReviewFailure?: AIReviewFailure
   aiReviewFailureReference?: string
   aiReviewFailureDetails?: AIReviewProviderDetails
+  reviewMode?: 'batch'
   pendingAIReview?: { field: FactId; action: 'answer' | 'edit' }
 }
 export class DiscoveryValidationError extends Error {}
