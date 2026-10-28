@@ -8,7 +8,7 @@ describe('customer-facing discovery presentation', () => {
     expect(discoveryProgress(null)).toMatchObject({ step: 1, percent: 0, topics: 0 })
     const start = createDiscovery('guided')
     const answered = recordAnswer(start, 'A local shop')
-    expect(discoveryProgress(answered)).toMatchObject({ step: 1, percent: 5, topics: 1 })
+    expect(discoveryProgress(answered)).toMatchObject({ step: 1, percent: 8, topics: 1 })
     expect(discoveryProgress({ ...answered, stage: 'confirmed' }, { hasResult: true })).toMatchObject({ step: 3, percent: 100 })
   })
   it('keeps uncertainty and early-review missing details visible', () => {
@@ -25,7 +25,7 @@ describe('customer-facing discovery presentation', () => {
       expect(Object.keys(choices).sort()).toEqual(Object.keys(catalog).sort())
     }
     expect(customerWording('Advanced website SEO needs Public website.')).toBe('Choose a public website before adding search-engine setup.')
-    expect(customerWording('AI scope mapping was unavailable. Test detail')).toContain('review them')
+    expect(customerWording('AI scope mapping was unavailable. Test detail')).toContain('consultant can check the full plan')
     expect(customerWording('Existing systems and constraints still needs confirmation.')).toBe('Confirm any tools, existing data or special needs.')
   })
 })

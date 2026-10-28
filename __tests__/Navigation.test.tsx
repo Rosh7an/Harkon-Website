@@ -79,12 +79,25 @@ describe('responsive navigation interactions', () => {
     expect(document.body.style.overflow).toBe('')
   })
   it('navigates home to the selected section from another page', async () => {
-    routing.pathname = '/pricing'
+    routing.pathname = '/cost-estimator'
     await act(async () => { root.render(<Nav />) })
     await click(toggle())
     await click([...dialog()!.querySelectorAll('button')].find(button => button.textContent === 'Services')!)
     expect(routing.push).toHaveBeenCalledWith('/#services')
     expect(dialog()).toBeNull()
+  })
+  it.each(['/', '/cost-estimator', '/services'])('opens the dedicated cost estimator from %s', async pathname => {
+    routing.pathname = pathname
+    await act(async () => { root.render(<Nav />) })
+    expect(container.textContent).not.toContain('Solution Planner')
+    const desktop = [...container.querySelectorAll('button')].find(button => button.textContent === 'Cost Estimator')!
+    await click(desktop)
+    expect(routing.push).toHaveBeenLastCalledWith('/cost-estimator')
+    await click(toggle())
+    await click([...dialog()!.querySelectorAll('button')].find(button => button.textContent === 'Cost Estimator')!)
+    expect(routing.push).toHaveBeenLastCalledWith('/cost-estimator')
+    expect(dialog()).toBeNull()
+    expect(document.body.style.overflow).toBe('')
   })
   it('restores the previous scroll setting when an open menu unmounts', async () => {
     document.body.style.overflow = 'auto'

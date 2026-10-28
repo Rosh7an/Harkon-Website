@@ -52,7 +52,7 @@ describe('solution composition', () => {
     expect(() => estimateSolution(emptyScope())).toThrow(/at least one/)
   })
   it('requires dependencies and price-critical details', () => {
-    expect(scopeIssues({ ...emptyScope(), surfaceIds: ['website'], capabilityIds: ['crm'] }).join()).toMatch(/needs/)
+    expect(scopeIssues({ ...emptyScope(), surfaceIds: ['website'], capabilityIds: ['crm'] }).join()).toMatch(/Add .*or remove this feature/)
     expect(scopeIssues({ ...emptyScope(), surfaceIds: ['website'], capabilityIds: ['payments'] }).join()).toMatch(/billing/)
     expect(scopeIssues({ ...emptyScope(), surfaceIds: ['portal'], integrationIds: ['existing_crm'] }).join()).toMatch(/provider/)
     expect(scopeIssues({ ...emptyScope(), surfaceIds: ['mobile'], integrationIds: ['external_api'] }).join()).toMatch(/human/)

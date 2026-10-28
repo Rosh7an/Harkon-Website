@@ -7,6 +7,7 @@ import DiscoveryProgress from './DiscoveryProgress'
 import EstimatePrice from './EstimatePrice'
 import SavedAnswerEditor from './SavedAnswerEditor'
 import styles from './SolutionDiscovery.module.css'
+import { restoreRequirementAnswers } from '@/utils/discoveryBatch'
 import { QUESTIONS, customerAnswers, discoveryReviewItems, requiresAIReview, type FactId } from '@/utils/discovery'
 import { CAPABILITIES, INTEGRATIONS, MODIFIERS, SURFACES, clearInactiveAnswers, emptyScope, reviewScope, scopeDependencyIssues, type ScopeDependencyIssue, type SolutionScope } from '@/utils/solutionCatalog'
 import { CAPABILITY_CHOICES, INTEGRATION_CHOICES, MODIFIER_CHOICES, SURFACE_CHOICES, customerWording } from '@/utils/discoveryPresentation'
@@ -156,9 +157,7 @@ export default function SolutionDiscovery({
   const pending = useRef<AbortController | null>(null)
   const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const questionHeading = useRef<HTMLHeadingElement>(null)
-  const questionScroll = useRef<HTMLDivElement>(null)
   const questionPages = useRef<HTMLElement>(null)
-  const navigationTools = useRef<HTMLDivElement>(null)
   const planMenu = useRef<HTMLDivElement>(null)
   const planMenuButton = useRef<HTMLButtonElement>(null)
   const revealQuestion = useRef(false)
@@ -193,7 +192,7 @@ export default function SolutionDiscovery({
 
   const saveDraft = useCallback(() => {
     if (!view) return
-    drafts.current[view.session.mode] = { token: view.token, expiresAt: view.session.expiresAt, scope, answer, selectedOptions, editing, correction, planStep, completedPlanSteps, reviewed }
+    drafts.current[view.session.mode] = { requirementAnswers: drafts.current[view.session.mode]?.requirementAnswers, token: view.token, expiresAt: view.session.expiresAt, scope, answer, selectedOptions, editing, correction, planStep, completedPlanSteps, reviewed }
     views.current[view.session.mode] = view
     persistDrafts(view.session.mode)
   }, [view, scope, answer, selectedOptions, editing, correction, planStep, completedPlanSteps, reviewed, persistDrafts])
@@ -219,6 +218,11 @@ export default function SolutionDiscovery({
   }
 
   function accept(data: DiscoveryResponse, local?: LocalDraft) {
+    const requirementAnswers = data.aiReview?.status === 'succeeded' || data.aiReview?.status === 'failed' ? undefined : local?.requirementAnswers
+    if (data.session.reviewMode === 'batch' && data.session.stage === 'discovery' && !requiresAIReview(data.session) && requirementAnswers) {
+      const session = restoreRequirementAnswers(data.session, requirementAnswers)
+      data = { ...data, session, question: QUESTIONS.find(question => !session.facts[question.id]) ?? null }
+    }
     if (currentView.current?.session.expiresAt !== data.session.expiresAt || currentView.current?.session.mode !== data.session.mode) questionCorrections.current = {}
     currentView.current = data
     views.current[data.session.mode] = data
@@ -251,7 +255,7 @@ export default function SolutionDiscovery({
     setNotice('')
     setExtrasOpen(true)
     setRevisitingQuestion(pendingEdit ?? null)
-    drafts.current[data.session.mode] = { token: data.token, expiresAt: data.session.expiresAt, scope: acceptedScope, answer: acceptedAnswer, selectedOptions: acceptedOptions, editing: acceptedEditing, correction: acceptedCorrection, planStep: acceptedStep, completedPlanSteps: acceptedCompletedSteps, reviewed: acceptedReviewed }
+    drafts.current[data.session.mode] = { requirementAnswers, token: data.token, expiresAt: data.session.expiresAt, scope: acceptedScope, answer: acceptedAnswer, selectedOptions: acceptedOptions, editing: acceptedEditing, correction: acceptedCorrection, planStep: acceptedStep, completedPlanSteps: acceptedCompletedSteps, reviewed: acceptedReviewed }
     persistDrafts(data.session.mode)
   }
 
@@ -324,13 +328,17 @@ export default function SolutionDiscovery({
     }
   }, [])
   useEffect(() => {
-    if (questionScroll.current) questionScroll.current.scrollTop = 0
     const pages = questionPages.current
     const activePage = pages?.querySelector<HTMLButtonElement>('[aria-current="page"]')
     if (pages && activePage) pages.scrollTo?.({ left: Math.max(0, activePage.offsetLeft - (pages.clientWidth - activePage.offsetWidth) / 2), behavior: 'instant' })
     questionHeading.current?.focus({ preventScroll: true })
-    if (revealQuestion.current && window.matchMedia?.('(max-width: 1023px)').matches) {
-      navigationTools.current?.scrollIntoView({ block: 'start', behavior: 'instant' })
+    // The document owns vertical scrolling. Only reveal a new question after
+    // deliberate navigation, and only if its heading is outside the usable view.
+    const heading = questionHeading.current
+    if (revealQuestion.current && heading) {
+      const bounds = heading.getBoundingClientRect()
+      const headerBottom = document.getElementById('nav')?.getBoundingClientRect().bottom ?? 0
+      if (bounds.top < headerBottom || bounds.bottom > window.innerHeight) heading.scrollIntoView?.({ block: 'start', behavior: 'instant' })
     }
     revealQuestion.current = false
   }, [view?.question?.id, view?.session.stage, view?.session.mode, view?.session.revision, planStep, revisitingQuestion])
@@ -357,7 +365,7 @@ export default function SolutionDiscovery({
     saveDraft()
     locked.current = true
     setBusy(true)
-    setAnalysing(payload.action === 'answer' || payload.action === 'edit')
+    setAnalysing(payload.action === 'answer' || payload.action === 'edit' || payload.action === 'review_answers')
     setError('')
     const controller = new AbortController()
     pending.current = controller
@@ -395,7 +403,7 @@ export default function SolutionDiscovery({
     const saved = keepInputs ? drafts.current[mode] : undefined
     const local: LocalDraft | undefined = saved ? { ...saved, reviewed: {}, planStep: 0, completedPlanSteps: 0, editing: null, correction: '' } : undefined
     if (await request({ action: 'start', mode }, mode, local)) {
-      if (saved) setNotice(mode === 'manual' ? 'New session started. Your saved choices are here as an unconfirmed draft—please review them again.' : 'New guided session started. Your unsent answer is still here. Earlier submitted answers could not be restored; please answer the questions again.')
+      if (saved) setNotice(mode === 'manual' ? 'New session started. Your saved choices are here as an unconfirmed draft—please review them again.' : saved.requirementAnswers ? 'New guided session started. Your locally saved answers are restored; complete the remaining questions before AI review.' : 'New guided session started. Your unsent answer is still here. Earlier submitted answers could not be restored; please answer the questions again.')
     }
   }
   async function retryRecovery() {
@@ -423,6 +431,24 @@ export default function SolutionDiscovery({
   }
 
   async function sendAnswer(text: string) {
+    const current = currentView.current
+    if (locked.current || !current || !text.trim() || text.trim().length > 2000 || requiresAIReview(current.session)) return
+    // A second submit can arrive before React commits the next local question.
+    // Never save the old rendered answer against the already-advanced ref.
+    if (view?.question?.id !== current.question?.id) return
+    if (current.session.reviewMode === 'batch' && current.session.stage === 'discovery' && current.question) {
+      const answers = { ...Object.fromEntries(customerAnswers(current.session)), [current.question.id]: text.trim() }
+      if (QUESTIONS.every(question => answers[question.id])) {
+        if (await request({ action: 'review_answers', answers })) { setAnswer(''); setSelectedOptions([]) }
+      } else {
+        const session = restoreRequirementAnswers(current.session, { [current.question.id]: text })
+        revealQuestion.current = true
+        accept({ ...current, session, question: QUESTIONS.find(question => !session.facts[question.id]) ?? null }, {
+          ...drafts.current.guided!, requirementAnswers: answers, answer: '', selectedOptions: [], correction: '', editing: null,
+        })
+      }
+      return
+    }
     if (await request({ action: 'answer', answer: text })) {
       setAnswer('')
       setSelectedOptions([])
@@ -546,6 +572,13 @@ export default function SolutionDiscovery({
       token: view.token, expiresAt: session.expiresAt, scope, answer, selectedOptions,
       editing: null, correction: '', planStep, completedPlanSteps, reviewed,
     }
+    if (session.reviewMode === 'batch' && session.stage === 'discovery' && !requiresAIReview(session)) {
+      const answers = { ...Object.fromEntries(customerAnswers(session)), [field]: correction.trim() }
+      const updated = restoreRequirementAnswers(session, { [field]: correction.trim() })
+      accept({ ...view, session: updated, question: view.question }, { ...local, requirementAnswers: answers })
+      delete questionCorrections.current[field]
+      return true
+    }
     const saved = await request({ action: 'edit', field, value: correction.trim(), ...(session.stage === 'review' ? { scope } : {}) }, session.mode, local)
     if (saved) delete questionCorrections.current[field]
     return saved
@@ -631,7 +664,7 @@ export default function SolutionDiscovery({
     {session && ready && !recovery && <DiscoveryProgress session={session} {...progressInput} onReviewRequirements={!busy && session.mode === 'guided' && session.stage === 'review' && !reviewingRequirements && Object.keys(session.facts).length > 0 ? () => openRequirements() : undefined} onContinuePlanning={!busy && !aiBlocked && reviewingRequirements ? continuePlanning : undefined} />}
 
     {session && view && <>
-      <div ref={navigationTools} className={styles.sessionTools}>
+      <div className={styles.sessionTools}>
         <div className={styles.planToolbar}>
           <div className={styles.approachNavigation}>
             <nav className={styles.questionNavigation} aria-label="Question navigation">
@@ -655,8 +688,8 @@ export default function SolutionDiscovery({
       </div>
       <div className={styles.workspace} data-guided-workspace={session.mode === 'guided'}>
         <div className={`${styles.glass} ${styles.panelFrame} min-w-0`} data-planner-frame>
-        <div className={`${styles.questionPanel} space-y-4 min-w-0`} data-question-layout={showingRequirements} role={showingRequirements ? undefined : 'region'} aria-label={showingRequirements ? undefined : 'Your solution plan'} tabIndex={showingRequirements ? undefined : 0}>
-          {session.mode === 'guided' && session.turns > 0 && session.providerStatus === 'guided_fallback' && <section className={styles.dependencyWarning} role={view.aiReview?.status === 'failed' ? 'alert' : 'status'} aria-label="AI review status">
+        <div className={`${styles.questionPanel} space-y-4 min-w-0`} data-question-layout={showingRequirements} role="region" aria-label={showingRequirements ? 'Your requirements' : 'Your solution plan'} tabIndex={0}>
+          {session.mode === 'guided' && session.turns > 0 && session.providerStatus === 'guided_fallback' && (session.reviewMode !== 'batch' || !!session.aiReviewFailure) && <section className={styles.dependencyWarning} role={view.aiReview?.status === 'failed' ? 'alert' : 'status'} aria-label="AI review status">
             <h3 className="font-semibold">The last AI review did not complete</h3><p>{aiReviewFailureMessage(session.aiReviewFailure)}</p>
             <p>{aiBlocked ? 'Your answer is saved. Retry AI review successfully before continuing. Your selections are preserved.' : 'Your answers are saved. Retry the review to update the AI suggestions.'}</p>
             {retryRemaining > 0 && <p role="timer" aria-live="off">Retry available in {retryRemaining} seconds.</p>}
@@ -668,8 +701,8 @@ export default function SolutionDiscovery({
             const status = aiBlocked && session.pendingAIReview?.field === question.id ? 'Awaiting AI review' : session.facts[question.id]?.status === 'unknown' ? 'Needs clarification' : answered ? 'Completed' : question.id === view.question?.id ? 'Current' : 'Not answered'
             return <button key={question.id} type="button" aria-current={current ? 'page' : undefined} disabled={busy || (!answered && question.id !== view.question?.id)} onClick={() => visitQuestion(question.id)}><span className={styles.questionNumber}>{index + 1}</span><span>{questionNames[question.id]}<small className="sr-only">{status}</small></span></button>
           })}</nav>}
-          {showingRequirements && <div ref={questionScroll} className={`${styles.questionScroll} space-y-4`} role="region" aria-label="Current question — scroll for more" tabIndex={0}>
-            {session.turns > 0 && <details className={styles.answerRecap} data-ai-understanding key={`${session.revision}:${revisitingQuestion ?? 'current'}`}>
+          {showingRequirements && <div className={`${styles.questionScroll} space-y-4`}>
+            {session.turns > 0 && (session.reviewMode !== 'batch' || session.stage !== 'discovery' || aiBlocked) && <details className={styles.answerRecap} data-ai-understanding key={`${session.revision}:${revisitingQuestion ?? 'current'}`}>
               <summary>{session.providerStatus === 'available' ? 'AI understanding' : 'AI understanding unavailable'}</summary>
               {session.providerStatus === 'available' ? <div className="space-y-3 pb-3">
                 <p>{customerWording(session.assistantMessage)}</p>
@@ -707,7 +740,7 @@ export default function SolutionDiscovery({
               <p id="discovery-answer-hint" className="text-sm text-[var(--muted)]">Add details if useful. Don’t include passwords or private customer records.</p>
               <p id="discovery-answer-limit" className={composedAnswer.length > 1600 || answerTooLong ? `text-xs ${answerTooLong ? 'text-[var(--error)]' : 'text-[var(--muted)]'}` : 'sr-only'}>{composedAnswer.length.toLocaleString('en-IN')} of 2,000 characters including selected answers.</p>
               <div className={styles.actions}>
-                <button type="submit" className={primary} disabled={busy || aiBlocked || !composedAnswer || answerTooLong}>{analysing ? 'Analysing…' : busy ? 'Saving…' : 'Continue'}</button>
+                <button type="submit" className={primary} disabled={busy || aiBlocked || !composedAnswer || answerTooLong}>{analysing ? 'Analysing…' : busy ? 'Saving…' : session.reviewMode === 'batch' && view.question.id === 'priority' ? 'Review all answers with AI' : 'Continue'}</button>
               </div>
             </form>}
           </div>}

@@ -10,6 +10,29 @@ const ok = (data: unknown) => ({ ok: true, json: async () => data })
 afterEach(() => vi.unstubAllGlobals())
 
 describe('discovery transport', () => {
+  it('accepts a saved batch-review failure without automatically replaying AI', async () => {
+    const data = view()
+    data.session.aiReviewFailure = 'rate_limit'
+    const failed = { ...data, code: 'DISCOVERY_AI_REVIEW_FAILED', aiReview: { status: 'failed', reason: 'rate_limit', requestId: 'batch-failure' } }
+    const fetcher = vi.fn().mockResolvedValue({ ok: false, status: 429, json: async () => failed })
+    vi.stubGlobal('fetch', fetcher)
+    expect(await requestDiscovery({ action: 'review_answers' }, new AbortController().signal)).toEqual(failed)
+    expect(fetcher).toHaveBeenCalledTimes(1)
+  })
+  it.each([[429, 'rate_limit'], [504, 'timeout'], [502, 'invalid_response'], [503, 'authentication'], [502, 'output_limit']])('preserves a saved snapshot on AI failure HTTP %i without retrying', async (status, reason) => {
+    const data = { ...view(), code: 'DISCOVERY_AI_REVIEW_FAILED', error: 'AI review failed.', aiReview: { status: 'failed', reason, requestId: 'test-request' } }
+    data.session = { ...data.session, providerStatus: 'guided_fallback', aiReviewFailure: reason } as typeof data.session
+    const fetcher = vi.fn().mockResolvedValue({ ok: false, status, json: async () => data })
+    vi.stubGlobal('fetch', fetcher)
+    const result = await requestDiscovery({ action: 'answer' }, new AbortController().signal)
+    expect(result).toEqual(data)
+    expect(result.session.answers?.business).toBe('A small studio')
+    expect(fetcher).toHaveBeenCalledTimes(1)
+  })
+  it('rejects an AI failure marker without a valid saved snapshot', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 502, json: async () => ({ code: 'DISCOVERY_AI_REVIEW_FAILED', error: 'Failed', aiReview: { status: 'failed', reason: 'invalid_response', requestId: 'id' } }) }))
+    await expect(requestDiscovery({ action: 'answer' }, new AbortController().signal)).rejects.toThrow('invalid response')
+  })
   it('retries a network failure with an identical token, revision and answer snapshot', async () => {
     const data = view()
     const fetcher = vi.fn().mockRejectedValueOnce(new TypeError('Load failed')).mockResolvedValueOnce(ok(data))
@@ -29,10 +52,10 @@ describe('discovery transport', () => {
     await expect(requestDiscovery({}, new AbortController().signal)).resolves.toEqual(view())
     expect(fetcher).toHaveBeenCalledTimes(2)
   })
-  it('limits repeated network failures and gives an actionable error', async () => {
-    const fetcher = vi.fn().mockRejectedValue(new TypeError('Load failed'))
+  it.each(['Load failed', 'Failed to fetch', 'NetworkError when attempting to fetch resource.'])('normalizes browser error "%s" and limits repeated network failures', async message => {
+    const fetcher = vi.fn().mockRejectedValue(new TypeError(message))
     vi.stubGlobal('fetch', fetcher)
-    await expect(requestDiscovery({}, new AbortController().signal)).rejects.toThrow('Your current input is still here')
+    await expect(requestDiscovery({}, new AbortController().signal)).rejects.toThrow('Network connection problem. We couldn’t complete the request to the server. Your current input is still here; check your connection and retry.')
     expect(fetcher).toHaveBeenCalledTimes(2)
   })
   it('retries when the connection drops while reading the response body', async () => {

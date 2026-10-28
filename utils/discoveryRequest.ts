@@ -31,6 +31,7 @@ function validateResponse(value: unknown): DiscoveryResponse {
       && typeof fact.value === 'string' && typeof fact.evidence === 'string' && oneOf(fact.status, ['reported', 'unknown']) && oneOf(fact.source, ['answer', 'ai', 'edit']))
     || !Array.isArray(session.messages) || !session.messages.every(message => isRecord(message) && oneOf(message.role, ['user', 'assistant']) && typeof message.text === 'string')
     || !Array.isArray(session.recommendations) || !session.recommendations.every(item => isRecord(item) && oneOf(item.group, ['surfaceIds', 'capabilityIds', 'integrationIds', 'modifierIds']) && typeof item.id === 'string' && typeof item.reason === 'string' && typeof item.evidence === 'string')) throw new Error(invalidResponse)
+  if (session.reviewMode !== undefined && session.reviewMode !== 'batch') throw new Error(invalidResponse)
   let scope: SolutionScope
   try { scope = parseScope(session.scope) } catch { throw new Error(invalidResponse) }
   const expectedQuestion = nextQuestion(session as unknown as DiscoverySession)
@@ -76,7 +77,7 @@ export async function requestDiscovery(payload: Record<string, unknown>, signal:
         // The answer was accepted and a new signed snapshot exists. Do not
         // replay it or discard it just because the downstream AI failed.
         const saved = validateResponse(data)
-        if (!['answer', 'edit', 'retry_ai'].includes(String(payload.action)) || saved.aiReview?.status !== 'failed' || response.status !== aiReviewHttpStatus(saved.aiReview.reason)) throw new Error(invalidResponse)
+        if (!['answer', 'edit', 'retry_ai', 'review_answers'].includes(String(payload.action)) || saved.aiReview?.status !== 'failed' || response.status !== aiReviewHttpStatus(saved.aiReview.reason)) throw new Error(invalidResponse)
         return saved
       }
       if ([502, 503, 504].includes(response.status) && attempt === 0) continue

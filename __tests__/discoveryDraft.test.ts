@@ -6,6 +6,18 @@ const now = 1000
 const draft: LocalDraft = { token: 'signed-token', expiresAt: 2000, scope: emptyScope(), answer: '', selectedOptions: [], editing: null, correction: '', planStep: 0, reviewed: {} }
 const stored = (manual: unknown = draft, guided: unknown = draft) => JSON.stringify({ version: 2, activeMode: 'manual', drafts: { manual, guided } })
 describe('bounded separate draft storage', () => {
+  it('restores bounded local requirement answers and rejects malformed answer maps', () => {
+    expect(readDraftStore(stored(draft, { ...draft, requirementAnswers: { business: 'A shop', pain: 'Not sure' } }), now)?.drafts.guided?.requirementAnswers).toEqual({ business: 'A shop', pain: 'Not sure' })
+    for (const requirementAnswers of [null, [], { malicious: 'x' }, { business: '' }, { business: 'x'.repeat(2001) }]) expect(readDraftStore(stored(draft, { ...draft, requirementAnswers }), now)?.drafts.guided).toBeUndefined()
+  })
+  it('retains completed-page progress separately from the current page and rejects invalid counts', () => {
+    const value = readDraftStore(stored({ ...draft, planStep: 0, completedPlanSteps: 3 }), now)!
+    expect(value.drafts.manual?.planStep).toBe(0)
+    expect(value.drafts.manual?.completedPlanSteps).toBe(3)
+    for (const completedPlanSteps of [-1, 4, 1.5, '3', null]) {
+      expect(readDraftStore(stored({ ...draft, completedPlanSteps }), now)?.drafts.manual).toBeUndefined()
+    }
+  })
   it('restores each draft independently, including unfinished answers and choices', () => {
     const value = readDraftStore(stored({ ...draft, scope: { ...emptyScope(), surfaceIds: ['website'] }, planStep: 2 }, { ...draft, answer: 'Unfinished answer' }), now)!
     expect(value.drafts.manual?.scope.surfaceIds).toEqual(['website'])
