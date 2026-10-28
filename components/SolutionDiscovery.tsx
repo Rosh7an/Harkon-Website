@@ -14,7 +14,7 @@ import { CAPABILITY_CHOICES, INTEGRATION_CHOICES, MODIFIER_CHOICES, SURFACE_CHOI
 import { DRAFT_STORAGE_KEY, LEGACY_STORAGE_KEY, readDraftStore, type DiscoveryMode, type DiscoveryResponse, type DraftStore, type LocalDraft } from '@/utils/discoveryDraft'
 import { REVIEW_FIELDS, type PlanStep, type ReviewedFields } from '@/utils/discoveryProgress'
 import { RejectedSession, requestDiscovery } from '@/utils/discoveryRequest'
-import { aiReviewFailureMessage, retrySecondsRemaining } from '@/utils/discoveryAIStatus'
+import { aiReviewFailureMessage, formatRetryDuration, retrySecondsRemaining } from '@/utils/discoveryAIStatus'
 import type { BusinessContactLinks } from '@/utils/businessContact'
 
 export type { DiscoveryResponse } from '@/utils/discoveryDraft'
@@ -365,7 +365,7 @@ export default function SolutionDiscovery({
     saveDraft()
     locked.current = true
     setBusy(true)
-    setAnalysing(payload.action === 'answer' || payload.action === 'edit' || payload.action === 'review_answers')
+    setAnalysing(payload.action === 'answer' || (payload.action === 'edit' && currentView.current?.session.reviewMode !== 'batch') || payload.action === 'review_answers')
     setError('')
     const controller = new AbortController()
     pending.current = controller
@@ -561,10 +561,16 @@ export default function SolutionDiscovery({
   }
   function continuePlanning() {
     if (aiBlocked) return
+    if (currentView.current?.session.requirementsDirty) { visitQuestion('priority'); return }
     if (revisitingQuestion) questionCorrections.current[revisitingQuestion] = correction
     revealQuestion.current = true
     setRevisitingQuestion(null)
     setCorrection('')
+  }
+  async function reviewUpdatedAnswers() {
+    const current = currentView.current
+    if (!current || requiresAIReview(current.session)) return false
+    return request({ action: 'review_answers', answers: Object.fromEntries(customerAnswers(current.session)), scope })
   }
   async function saveAnswerCorrection(field: FactId) {
     if (!view || !session || !correction.trim() || correction.trim().length > 2000) return false
@@ -579,7 +585,12 @@ export default function SolutionDiscovery({
       delete questionCorrections.current[field]
       return true
     }
-    const saved = await request({ action: 'edit', field, value: correction.trim(), ...(session.stage === 'review' ? { scope } : {}) }, session.mode, local)
+    if (customerAnswers(session).get(field) === correction.trim()) {
+      delete questionCorrections.current[field]
+      setEditing(null)
+      return true
+    }
+    const saved = await request({ action: 'edit', deferAI: true, field, value: correction.trim(), ...(session.stage === 'review' ? { scope } : {}) }, session.mode, local)
     if (saved) delete questionCorrections.current[field]
     return saved
   }
@@ -609,6 +620,7 @@ export default function SolutionDiscovery({
       const saved = currentView.current?.session
       setCorrection(questionCorrections.current[nextAnsweredQuestion.id] ?? (saved ? customerAnswers(saved).get(nextAnsweredQuestion.id) ?? saved.facts[nextAnsweredQuestion.id]?.evidence ?? '' : ''))
     } else {
+      if (currentView.current?.session.requirementsDirty) { await reviewUpdatedAnswers(); return }
       setRevisitingQuestion(null)
       setCorrection('')
     }
@@ -692,8 +704,8 @@ export default function SolutionDiscovery({
           {session.mode === 'guided' && session.turns > 0 && session.providerStatus === 'guided_fallback' && (session.reviewMode !== 'batch' || !!session.aiReviewFailure) && <section className={styles.dependencyWarning} role={view.aiReview?.status === 'failed' ? 'alert' : 'status'} aria-label="AI review status">
             <h3 className="font-semibold">The last AI review did not complete</h3><p>{aiReviewFailureMessage(session.aiReviewFailure)}</p>
             <p>{aiBlocked ? 'Your answer is saved. Retry AI review successfully before continuing. Your selections are preserved.' : 'Your answers are saved. Retry the review to update the AI suggestions.'}</p>
-            {retryRemaining > 0 && <p role="timer" aria-live="off">Retry available in {retryRemaining} seconds.</p>}
-            <button type="button" className={secondary} disabled={busy || retryRemaining > 0} onClick={() => void retryAIReview()}>{busy ? 'Retrying AI review…' : retryRemaining > 0 ? `Retry in ${retryRemaining}s` : 'Retry AI review'}</button>
+            {retryRemaining > 0 && <p role="timer" aria-live="off">Retry after {formatRetryDuration(retryRemaining)}.</p>}
+            <button type="button" className={secondary} disabled={busy || retryRemaining > 0} onClick={() => void retryAIReview()}>{busy ? 'Retrying AI review…' : retryRemaining > 0 ? `Retry in ${formatRetryDuration(retryRemaining)}` : 'Retry AI review'}</button>
           </section>}
           {showingRequirements && <nav ref={questionPages} className={styles.questionPages} aria-label="Discovery questions">{QUESTIONS.map((question, index) => {
             const answered = !!session.facts[question.id]
@@ -840,7 +852,7 @@ export default function SolutionDiscovery({
             {reviewItems.length > 0 && <div className="rounded-xl border border-[var(--border-hi)] p-4 text-sm space-y-3"><h3 className="font-semibold">Optional team review</h3><ul className="list-disc pl-5 space-y-1">{reviewItems.map(item => <li key={item}>{customerWording(item)}</li>)}</ul><label className="flex gap-3 items-start min-h-11"><input type="checkbox" className="mt-1 h-5 w-5" checked={allowPartial} disabled={busy} onChange={event => setAllowPartial(event.target.checked)} /><span>Leave these unanswered items out and continue with a partial estimate.</span></label></div>}
             <label className="flex gap-3 items-start min-h-11 text-sm"><input type="checkbox" className="mt-1 h-5 w-5" checked={approved} disabled={busy} onChange={event => setApproved(event.target.checked)} /><span>I have reviewed my answers, chosen features and what this estimate includes.</span></label>
             <div className={styles.actions}>
-              <button className={primary} disabled={busy || aiBlocked || !approved || issues.length > 0 || (reviewItems.length > 0 && !allowPartial)} onClick={() => void request({ action: 'confirm', scope, confirmed: approved, allowPartial })}>{busy ? 'Calculating…' : allowPartial ? 'Confirm and estimate selected work only' : 'Confirm my plan and see estimate'}</button>
+              {session.requirementsDirty ? <button className={primary} disabled={busy || aiBlocked || !!editing} onClick={() => void reviewUpdatedAnswers()}>{busy ? 'Analysing…' : 'Review updated answers with AI'}</button> : <button className={primary} disabled={busy || aiBlocked || !approved || issues.length > 0 || (reviewItems.length > 0 && !allowPartial)} onClick={() => void request({ action: 'confirm', scope, confirmed: approved, allowPartial })}>{busy ? 'Calculating…' : allowPartial ? 'Confirm and estimate selected work only' : 'Confirm my plan and see estimate'}</button>}
               {/* Callback requests paused until email delivery is restored.
               <button className={secondary} disabled={busy} onClick={openProposal}>Ask the team for guidance</button>
               */}

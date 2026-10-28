@@ -9,6 +9,17 @@ function providerErrorBody(error: unknown) {
   if (!isRecord(error) || !isRecord(error.error)) return undefined
   return isRecord(error.error.error) ? error.error.error : error.error
 }
+export function formatRetryDuration(seconds: number): string {
+  let remaining = Number.isFinite(seconds) ? Math.max(0, Math.ceil(seconds)) : 0
+  const parts: string[] = []
+  for (const [unit, size] of [['hour', 3600], ['minute', 60], ['second', 1]] as const) {
+    const count = Math.floor(remaining / size)
+    remaining %= size
+    if (count) parts.push(`${count} ${unit}${count === 1 ? '' : 's'}`)
+  }
+  return parts.join(' ') || '0 seconds'
+}
+
 export function retrySecondsRemaining(retryAt: number | undefined, now = Date.now()): number {
   return typeof retryAt === 'number' && Number.isFinite(retryAt) ? Math.max(0, Math.ceil((retryAt - now) / 1000)) : 0
 }
@@ -64,7 +75,7 @@ export function aiReviewFailureMessage(reason?: AIReviewFailure): string {
     case 'invalid_response': return 'The AI returned a response that failed our format or evidence checks.'
     case 'timeout': return 'The AI service took too long to respond.'
     case 'authentication': return 'The AI service rejected the server credentials or access permissions.'
-    case 'rate_limit': return 'The AI service reported a request or usage limit.'
+    case 'rate_limit': return 'We’re experiencing heavy traffic. Please try again shortly.'
     case 'provider_error': return 'The AI request failed because of a connection or service error.'
     case 'output_limit': return 'The AI response reached its output length limit before the review finished.'
     case 'request_rejected': return 'The AI service rejected the review request. The team can investigate using the reference ID.'

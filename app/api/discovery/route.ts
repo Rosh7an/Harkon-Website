@@ -1,4 +1,4 @@
-import { migrateBatchCollection, prepareBatchReview } from '@/utils/discoveryBatch'
+import { migrateBatchCollection, parseRequirementAnswers, prepareBatchReview } from '@/utils/discoveryBatch'
 import { NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
 import { QUESTIONS, applyAgentOutput, boundedText, createDiscovery, customerAnswers, DiscoveryValidationError, discoveryReviewItems, editFact, nextQuestion, originalRequirementAnswers, recordAnswer, requirementReviewItems, requiresAIReview, type DiscoverySession } from '@/utils/discovery'
@@ -80,9 +80,18 @@ export async function POST(req: Request) {
     if (body.revision !== session.revision) throw new DiscoveryValidationError('This response is out of date. Reload your saved discovery.')
     if (requiresAIReview(session) && ['answer', 'edit', 'review', 'confirm', 'review_answers'].includes(String(body.action))) return NextResponse.json({ code: 'DISCOVERY_AI_REVIEW_REQUIRED', error: 'Retry AI review successfully before continuing. Your saved answers are preserved.', requestId }, { status: 409, headers: { 'Cache-Control': 'no-store' } })
     if (body.action === 'review_answers') {
-      if (session.mode !== 'guided' || session.stage !== 'discovery') throw new DiscoveryValidationError('Collect guided answers before requesting AI review.')
+      if (session.mode !== 'guided' || !['discovery', 'review'].includes(session.stage)) throw new DiscoveryValidationError('Collect guided answers before requesting AI review.')
       let updated: DiscoverySession
-      try { updated = prepareBatchReview(session, body.answers) }
+      try {
+        if (session.stage === 'review') {
+          const answers = parseRequirementAnswers(body.answers, true)
+          updated = body.scope === undefined ? session : { ...session, scope: parseScope(body.scope) }
+          for (const question of QUESTIONS) {
+            if (customerAnswers(updated).get(question.id) !== answers[question.id]) updated = editFact(updated, question.id, answers[question.id])
+          }
+          updated = { ...updated, revision: session.revision + 1, reviewMode: 'batch', requirementsDirty: false }
+        } else updated = prepareBatchReview(session, body.answers)
+      }
       catch (error) { throw new DiscoveryValidationError(error instanceof Error ? error.message : 'Invalid requirement answers.') }
       const answer = updated.answers!.priority!
       try {
@@ -97,6 +106,7 @@ export async function POST(req: Request) {
     }
     if (session.reviewMode === 'batch' && session.providerStatus !== 'available' && ['review', 'confirm'].includes(String(body.action))) throw new DiscoveryValidationError('Complete AI review of all seven answers before continuing.')
     if (body.action === 'retry_ai') {
+      if (session.requirementsDirty) throw new DiscoveryValidationError('Finish saving your updated answers before AI review.')
       if (session.reviewMode === 'batch' && QUESTIONS.some(question => !session.answers?.[question.id])) throw new DiscoveryValidationError('Complete all seven answers before AI review.')
       const answer = session.pendingAIReview ? session.answers?.[session.pendingAIReview.field] ?? session.facts[session.pendingAIReview.field]?.evidence : originalRequirementAnswers(session).at(-1)?.text
       if (session.mode !== 'guided' || session.stage === 'confirmed' || !answer) throw new DiscoveryValidationError('Save a guided answer before retrying AI review.')
@@ -144,7 +154,7 @@ export async function POST(req: Request) {
       const draftSession = session.stage === 'review' && body.scope !== undefined ? { ...session, scope: parseScope(body.scope) } : session
       let updated = editFact(draftSession, body.field, answer)
       const field = QUESTIONS.find(question => question.id === body.field)?.id
-      if (session.reviewMode === 'batch' && session.stage === 'discovery') return respond(updated)
+      if (session.reviewMode === 'batch' || body.deferAI === true) return respond({ ...updated, reviewMode: 'batch', requirementsDirty: session.stage === 'review' || session.requirementsDirty === true })
       try {
         const output = await consult(updated, answer)
         if (output) updated = applyAgentOutput(updated, output)
@@ -171,6 +181,7 @@ export async function POST(req: Request) {
       return respond(updated, { requestId, aiAttempted: true })
     }
     if (body.action === 'confirm') {
+      if (session.requirementsDirty) throw new DiscoveryValidationError('Review all updated answers with AI before confirming.')
       if (session.stage !== 'review') throw new DiscoveryValidationError('Review your requirements before confirming.')
       if (body.confirmed !== true) throw new DiscoveryValidationError('Confirm the scope before requesting an estimate.')
       const scope = parseScope(body.scope)
