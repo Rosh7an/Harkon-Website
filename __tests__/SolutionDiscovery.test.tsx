@@ -209,7 +209,7 @@ describe('discovery interface', () => {
     const saved = recordAnswer(initial.session, 'A fictional shop')
     saved.aiReviewFailure = 'rate_limit'
     saved.pendingAIReview = { field: 'business', action: 'answer' }
-    saved.aiReviewFailureDetails = { retryAt: Date.now() + 14000 }
+    saved.aiReviewFailureDetails = { retryAt: Date.now() + 90000 }
     const failed = { code: 'DISCOVERY_AI_REVIEW_FAILED', token: 'pending-token', session: saved, question: nextQuestion(saved), reviewItems: [], result: null, aiReview: { status: 'failed', reason: 'rate_limit', requestId: 'countdown-test' } }
     const recoveredSession = applyAgentOutput(saved, { acknowledgment: 'Reviewed.', facts: [], recommendations: [], reviewItems: [] })
     const recovered = { token: 'recovered-token', session: recoveredSession, question: nextQuestion(recoveredSession), reviewItems: [], result: null, aiReview: { status: 'succeeded', requestId: 'retry-test' } }
@@ -218,21 +218,25 @@ describe('discovery interface', () => {
     await chooseApproach('guided')
     await typeAnswer('A fictional shop')
     vi.useFakeTimers()
-    vi.setSystemTime(saved.aiReviewFailureDetails.retryAt! - 14000)
+    vi.setSystemTime(saved.aiReviewFailureDetails.retryAt! - 90000)
     await click(button('Continue'))
-    expect(button('Retry in 14s').disabled).toBe(true)
+    expect(button('Retry in 1 minute 30 seconds').disabled).toBe(true)
     expect(button('Continue').disabled).toBe(true)
     await remount()
-    expect(button('Retry in 14s').disabled).toBe(true)
+    expect(button('Retry in 1 minute 30 seconds').disabled).toBe(true)
     expect(container.querySelector('textarea')?.value).toBe('A fictional shop')
     const panel = container.querySelector<HTMLElement>('[aria-label="Your requirements"]')!
     expect(panel.contains(container.querySelector('[aria-label="AI review status"]'))).toBe(true)
     expect(container.querySelector('textarea')?.closest('[role="region"]')).toBe(panel)
     const reveal = vi.fn()
     container.querySelector<HTMLElement>('h2')!.scrollIntoView = reveal
-    await act(async () => { vi.advanceTimersByTime(13000) })
+    await act(async () => { vi.advanceTimersByTime(30000) })
+    expect(button('Retry in 1 minute').disabled).toBe(true)
+    await act(async () => { vi.advanceTimersByTime(1000) })
+    expect(button('Retry in 59 seconds').disabled).toBe(true)
+    await act(async () => { vi.advanceTimersByTime(58000) })
     expect(reveal).not.toHaveBeenCalled()
-    expect(button('Retry in 1s').disabled).toBe(true)
+    expect(button('Retry in 1 second').disabled).toBe(true)
     await act(async () => { vi.advanceTimersByTime(1000) })
     expect(button('Retry AI review').disabled).toBe(false)
     expect(button('Continue').disabled).toBe(true)
@@ -294,6 +298,28 @@ describe('discovery interface', () => {
     window.dispatchEvent(new Event('pagehide'))
     expect(JSON.parse(sessionStorage.getItem(DRAFT_STORAGE_KEY)!).drafts.guided.answer).toBe('A draft just before refresh')
   })
+  it('defers corrected requirements until the last question and skips unchanged answers', async () => {
+    let view = guidedReview()
+    view.session.reviewMode = 'batch'
+    const fetcher = vi.fn().mockImplementation(async (_url, options) => {
+      const body = JSON.parse(options.body)
+      if (body.action === 'edit') view = { ...view, session: { ...editFact({ ...view.session, scope: body.scope }, body.field, body.value), requirementsDirty: true } }
+      if (body.action === 'review_answers') view = { ...view, session: { ...view.session, providerStatus: 'available', requirementsDirty: false } }
+      return { ok: true, json: async () => view }
+    })
+    vi.stubGlobal('fetch', fetcher)
+    await chooseApproach('guided')
+    await click(namedButton('Review requirements'))
+    await typeAnswer('A furniture workshop')
+    await click(button('Save and continue'))
+    expect(fetcher.mock.calls.map(call => JSON.parse(call[1].body).action)).toEqual(['start', 'edit'])
+    await click(button('Save and continue'))
+    expect(fetcher).toHaveBeenCalledTimes(2)
+    await click(button('7PriorityCompleted'))
+    await click(button('Save and continue'))
+    expect(fetcher.mock.calls.map(call => JSON.parse(call[1].body).action)).toEqual(['start', 'edit', 'review_answers'])
+    expect(JSON.parse(fetcher.mock.calls[2][1].body).answers.business).toBe('A furniture workshop')
+  })
   it('reopens requirements from feature planning and preserves local scope when saving a correction', async () => {
     let view = guidedReview()
     const fetcher = vi.fn().mockImplementation(async (_url, options) => {
@@ -352,7 +378,7 @@ describe('discovery interface', () => {
     const fetcher = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => initial }).mockResolvedValueOnce({ ok: true, json: async () => recovered })
     vi.stubGlobal('fetch', fetcher)
     await chooseApproach('guided')
-    expect(container.querySelector('[aria-label="AI review status"]')?.textContent).toContain('request or usage limit')
+    expect(container.querySelector('[aria-label="AI review status"]')?.textContent).toContain('We’re experiencing heavy traffic. Please try again shortly.')
     expect(button('Continue to features').disabled).toBe(true)
     await click(button('Retry AI review'))
     const payload = JSON.parse(fetcher.mock.calls[1][1].body)

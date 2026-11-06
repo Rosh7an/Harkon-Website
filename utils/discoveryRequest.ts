@@ -32,6 +32,7 @@ function validateResponse(value: unknown): DiscoveryResponse {
     || !Array.isArray(session.messages) || !session.messages.every(message => isRecord(message) && oneOf(message.role, ['user', 'assistant']) && typeof message.text === 'string')
     || !Array.isArray(session.recommendations) || !session.recommendations.every(item => isRecord(item) && oneOf(item.group, ['surfaceIds', 'capabilityIds', 'integrationIds', 'modifierIds']) && typeof item.id === 'string' && typeof item.reason === 'string' && typeof item.evidence === 'string')) throw new Error(invalidResponse)
   if (session.reviewMode !== undefined && session.reviewMode !== 'batch') throw new Error(invalidResponse)
+  if (session.requirementsDirty !== undefined && typeof session.requirementsDirty !== 'boolean') throw new Error(invalidResponse)
   let scope: SolutionScope
   try { scope = parseScope(session.scope) } catch { throw new Error(invalidResponse) }
   const expectedQuestion = nextQuestion(session as unknown as DiscoverySession)

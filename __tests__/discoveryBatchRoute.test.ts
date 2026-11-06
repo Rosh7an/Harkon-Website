@@ -11,6 +11,52 @@ async function send(body: unknown) {
 }
 beforeEach(() => { client++; vi.mocked(consult).mockReset().mockResolvedValue({ acknowledgment: 'Reviewed all answers.', facts: [], recommendations: [], reviewItems: [] }) })
 describe('one AI review for all seven answers', () => {
+  it('saves corrections without AI, restores them, blocks stale confirmation and reviews the whole batch once', async () => {
+    let view = (await send({ action: 'start', mode: 'guided' })).data
+    view = (await send({ action: 'review_answers', token: view.token, revision: 0, answers })).data
+    vi.mocked(consult).mockClear()
+    const corrected = { ...answers, workflow: 'Staff track customers and follow-ups', users: 'Five staff' }
+    for (const field of ['workflow', 'users'] as const) {
+      const saved = await send({ action: 'edit', token: view.token, revision: view.session.revision, field, value: corrected[field], scope: view.session.scope })
+      expect(saved.status).toBe(200)
+      expect(saved.data.aiReview.status).toBe('not_requested')
+      view = saved.data
+    }
+    expect(consult).not.toHaveBeenCalled()
+    view = (await send({ action: 'restore', token: view.token })).data
+    expect(view.session.requirementsDirty).toBe(true)
+    expect(view.session.answers).toEqual(corrected)
+    for (const action of ['confirm', 'retry_ai']) expect((await send({ action, token: view.token, revision: view.session.revision, confirmed: true, scope: emptyScope() })).status).toBe(400)
+    expect(consult).not.toHaveBeenCalled()
+    const reviewed = await send({ action: 'review_answers', token: view.token, revision: view.session.revision, answers: corrected, scope: view.session.scope })
+    expect(reviewed.status).toBe(200)
+    expect(reviewed.data.session.requirementsDirty).toBe(false)
+    expect(consult).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(consult).mock.calls[0][0].answers).toEqual(corrected)
+  })
+  it.each(['', 'x'.repeat(2001)])('rejects invalid corrections without an AI call', async value => {
+    let view = (await send({ action: 'start', mode: 'guided' })).data
+    view = (await send({ action: 'review_answers', token: view.token, revision: 0, answers })).data
+    vi.mocked(consult).mockClear()
+    expect((await send({ action: 'edit', token: view.token, revision: view.session.revision, field: 'workflow', value })).status).toBe(400)
+    expect(consult).not.toHaveBeenCalled()
+  })
+  it('preserves corrected answers when the final review fails and retries the batch once', async () => {
+    let view = (await send({ action: 'start', mode: 'guided' })).data
+    view = (await send({ action: 'review_answers', token: view.token, revision: 0, answers })).data
+    view = (await send({ action: 'edit', token: view.token, revision: view.session.revision, field: 'workflow', value: 'x'.repeat(2000) })).data
+    vi.mocked(consult).mockClear().mockRejectedValueOnce({ status: 503 })
+    const failed = await send({ action: 'review_answers', token: view.token, revision: view.session.revision, answers: view.session.answers })
+    expect(failed.status).toBe(502)
+    expect(failed.data.session.answers.workflow).toBe('x'.repeat(2000))
+    expect((await send({ action: 'confirm', token: failed.data.token, revision: failed.data.session.revision, confirmed: true })).status).toBe(409)
+    expect(consult).toHaveBeenCalledTimes(1)
+    const retried = await send({ action: 'retry_ai', token: failed.data.token, revision: failed.data.session.revision, scope: failed.data.session.scope })
+    expect(retried.status).toBe(200)
+    expect(retried.data.session.requirementsDirty).toBe(false)
+    expect(vi.mocked(consult).mock.calls[1][0].answers?.workflow).toBe('x'.repeat(2000))
+    expect(consult).toHaveBeenCalledTimes(2)
+  })
   it('starts in batch mode and submits all requirements in exactly one AI call', async () => {
     const start = (await send({ action: 'start', mode: 'guided' })).data
     expect(start.session.reviewMode).toBe('batch')
@@ -63,3 +109,4 @@ describe('one AI review for all seven answers', () => {
     expect(consult).not.toHaveBeenCalled()
   })
 })
+

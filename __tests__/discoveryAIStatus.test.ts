@@ -1,9 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import { DiscoveryValidationError } from '../utils/discovery'
-import { aiReviewFailureMessage, aiReviewFailureReason, aiReviewProviderDetails, retrySecondsRemaining } from '../utils/discoveryAIStatus'
+import { aiReviewFailureMessage, aiReviewFailureReason, aiReviewProviderDetails, formatRetryDuration, retrySecondsRemaining } from '../utils/discoveryAIStatus'
 import { APIConnectionTimeoutError } from 'groq-sdk'
 
 describe('AI review diagnostics', () => {
+  it.each([
+    [30, '30 seconds'], [1, '1 second'], [59, '59 seconds'],
+    [60, '1 minute'], [90, '1 minute 30 seconds'], [3599, '59 minutes 59 seconds'],
+    [3600, '1 hour'], [3690, '1 hour 1 minute 30 seconds'], [7200, '2 hours'],
+    [0, '0 seconds'], [-1, '0 seconds'], [NaN, '0 seconds'], [Infinity, '0 seconds'], [0.1, '1 second'],
+  ])('formats %s seconds as %s', (seconds, expected) => {
+    expect(formatRetryDuration(seconds)).toBe(expected)
+  })
   it('uses the provider retry deadline without inventing a wait when it is missing', () => {
     const now = 1900000000000
     expect(aiReviewProviderDetails({ status: 429, headers: new Headers({ 'retry-after': '14' }) }, now).retryAt).toBe(now + 14000)
