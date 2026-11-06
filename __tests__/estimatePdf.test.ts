@@ -5,7 +5,11 @@ import { QUESTIONS, createDiscovery } from '../utils/discovery'
 import type { DiscoveryResponse } from '../utils/discoveryDraft'
 import { emptyScope, estimateSolution, reviewScope } from '../utils/solutionCatalog'
 
-const options = { logo: new Uint8Array(readFileSync('public/logo-lockup-onlight.png')), date: new Date('2026-10-14T00:00:00Z') }
+// A 200 px copy of the site logo with the same proportions. Decoding the real
+// 890 KB logo took about 1.4 s per PDF and made these tests time out under
+// full-suite load. One test below still embeds the real logo.
+const options = { logo: new Uint8Array(readFileSync('__tests__/fixtures/logo-lockup-small.png')), date: new Date('2026-10-14T00:00:00Z') }
+const siteLogo = () => new Uint8Array(readFileSync('public/logo-lockup-onlight.png'))
 function confirmed(): DiscoveryResponse {
   const session = createDiscovery('manual')
   session.stage = 'confirmed'
@@ -29,9 +33,13 @@ describe('branded estimate PDF', () => {
     expect(output).toContain(`Page 1 of ${pdf.getNumberOfPages()}`)
     expect(output).not.toContain(view.token)
     expect(pdf.getNumberOfPages()).toBe(2)
-  // The first export also loads jsPDF and decodes the full-resolution logo.
-  // Allow for cold imports while the rest of the suite starts its DOM workers.
+  // The first export also loads jsPDF; allow for a cold import under load.
   }, 15_000)
+  it('embeds the real website logo', async () => {
+    const pdf = await createEstimatePdf(confirmed(), { ...options, logo: siteLogo() })
+    expect(pdf.output()).toContain('/Subtype /Image')
+  // Decoding the full-size logo is slow in jsdom.
+  }, 30_000)
   it('handles no discovery answers without inventing client details', async () => {
     const pdf = await createEstimatePdf(confirmed(), options)
     expect(pdf.output()).not.toContain('Your requirements')
@@ -133,8 +141,7 @@ describe('branded estimate PDF', () => {
         expect(error.message).toMatch(/call or WhatsApp/)
         expect(error.message).not.toMatch(/proposal form/)
       }
-    // Builds four PDFs; each decodes the full-resolution logo.
-    }, 20_000)
+    })
     it('uses the browser canvas by default and reports when it is unavailable', async () => {
       // jsdom has no canvas implementation, like a locked-down browser.
       const getContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
