@@ -91,10 +91,62 @@ describe('branded estimate PDF', () => {
     view.result!.highEstimateCost = NaN
     await expect(createEstimatePdf(view, options)).rejects.toThrow(/invalid values/)
   })
-  it('rejects unreadable scripts instead of exporting corrupted requirements', async () => {
-    const view = confirmed()
-    view.session.facts.pain = { value: 'മലയാളം', evidence: '', source: 'answer', status: 'reported' }
-    await expect(createEstimatePdf(view, options)).rejects.toThrow(/proposal form/)
+  describe('non-Latin answers', () => {
+    // A 1x1 transparent PNG stands in for browser-drawn text in jsdom.
+    const PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
+    const line = { data: PIXEL, widthMm: 40, heightMm: 7, baselineMm: 4.9 }
+    const imageCount = (output: string) => (output.match(/\/Subtype \/Image/g) ?? []).length
+    const guided = (pain: string) => {
+      const view = confirmed()
+      view.session.facts.pain = { value: pain, evidence: '', source: 'answer', status: 'reported' }
+      view.session.facts.business = { value: 'A salon in Kochi', evidence: '', source: 'answer', status: 'reported' }
+      return view
+    }
+    it('draws Malayalam answers as images and keeps Latin answers as text', async () => {
+      const renderComplexText = vi.fn(() => [line, line])
+      const baseline = imageCount((await createEstimatePdf(guided('Manual booking'), options)).output())
+      const pdf = await createEstimatePdf(guided('ഞങ്ങൾക്ക് ബുക്കിംഗ് വേണം'), { ...options, renderComplexText })
+      const output = pdf.output()
+      expect(renderComplexText).toHaveBeenCalledTimes(1)
+      expect(renderComplexText).toHaveBeenCalledWith('ഞങ്ങൾക്ക് ബുക്കിംഗ് വേണം', expect.objectContaining({ fontSizePt: 10, widthMm: 174, lineHeightMm: 5 }))
+      expect(output).toContain('A salon in Kochi')
+      expect(output).toContain('Main difficulty')
+      // jsPDF stores identical images once, so expect at least one more image object.
+      expect(imageCount(output)).toBeGreaterThan(baseline)
+    })
+    it('renders a mixed Malayalam and English answer as one wrapped paragraph', async () => {
+      const renderComplexText = vi.fn(() => [line])
+      await createEstimatePdf(guided('We need booking — ബുക്കിംഗ് വേണം'), { ...options, renderComplexText })
+      expect(renderComplexText).toHaveBeenCalledWith('We need booking - ബുക്കിംഗ് വേണം', expect.anything())
+    })
+    it('continues a long Malayalam answer across pages with a continued heading', async () => {
+      const renderComplexText = vi.fn(() => Array.from({ length: 150 }, () => line))
+      const short = await createEstimatePdf(guided('Manual booking'), options)
+      const pdf = await createEstimatePdf(guided('മലയാളം '.repeat(400)), { ...options, renderComplexText })
+      expect(pdf.getNumberOfPages()).toBeGreaterThan(short.getNumberOfPages() + 1)
+      expect(pdf.output()).toContain('Main difficulty \\(continued\\)')
+    })
+    it('explains a browser drawing failure without pointing to the paused proposal form', async () => {
+      const failures = [() => { throw new Error('no canvas') }, () => [], () => [{ ...line, data: 'not-an-image' }], () => [{ ...line, widthMm: 999 }]]
+      for (const renderComplexText of failures) {
+        const error = await createEstimatePdf(guided('മലയാളം'), { ...options, renderComplexText }).then(() => new Error('PDF was created'), (failure: Error) => failure)
+        expect(error.message).toMatch(/call or WhatsApp/)
+        expect(error.message).not.toMatch(/proposal form/)
+      }
+    // Builds four PDFs; each decodes the full-resolution logo.
+    }, 20_000)
+    it('uses the browser canvas by default and reports when it is unavailable', async () => {
+      // jsdom has no canvas implementation, like a locked-down browser.
+      const getContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+      await expect(createEstimatePdf(guided('മലയാളം'), options)).rejects.toThrow(/call or WhatsApp/)
+      expect(getContext).toHaveBeenCalled()
+      getContext.mockRestore()
+    })
+    it('never sends Latin-only text to the image renderer', async () => {
+      const renderComplexText = vi.fn(() => [line])
+      await createEstimatePdf(guided('Café owners need “booking” — ₹ budgets…'), { ...options, renderComplexText })
+      expect(renderComplexText).not.toHaveBeenCalled()
+    })
   })
   it('loads the existing browser logo and reports asset failures', async () => {
     const fetch = vi.fn().mockResolvedValueOnce({ ok: true, arrayBuffer: async () => options.logo.buffer }).mockResolvedValueOnce({ ok: false })

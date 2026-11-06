@@ -1,8 +1,10 @@
 import { QUESTIONS, customerAnswers, discoveryReviewItems } from './discovery'
 import type { DiscoveryResponse } from './discoveryDraft'
 import { estimatePricing } from './estimatePricing'
+import { needsComplexRendering, renderWithCanvas, type ComplexTextRenderer, type TextLineImage } from './pdfComplexText'
 
-interface PdfOptions { logo?: Uint8Array; date?: Date }
+interface PdfOptions { logo?: Uint8Array; date?: Date; renderComplexText?: ComplexTextRenderer }
+const COMPLEX_TEXT_FAILED = 'Your browser could not prepare some of your text for the PDF. Please retry, or call or WhatsApp our consultant to share your requirements.'
 const INK = '#18263d'
 const MUTED = '#536477'
 const LINE = '#dce3eb'
@@ -15,9 +17,12 @@ const BOTTOM = 270
 const LEADING = 5
 
 function printable(value: string): string {
-  const text = value.replace(/₹/g, 'INR ').replace(/[\u2010-\u2015]/g, '-').replace(/[“”]/g, '"').replace(/[‘’]/g, "'").replace(/…/g, '...').replace(/\u00a0/g, ' ').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '')
-  // Keep the existing explicit limitation: never silently corrupt customer words.
-  if (/[^\u0000-\u00FF]/.test(text)) throw new Error('This PDF font cannot display some of your text. Please use the proposal form to share the full requirements.')
+  return value.replace(/₹/g, 'INR ').replace(/[\u2010-\u2015]/g, '-').replace(/[“”]/g, '"').replace(/[‘’]/g, "'").replace(/…/g, '...').replace(/\u00a0/g, ' ').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '')
+}
+// Catalogue names are ours and always Latin; customer text may be any script.
+function latinOnly(value: string): string {
+  const text = printable(value)
+  if (needsComplexRendering(text)) throw new Error('The estimate contains text this PDF cannot display. Please reopen your plan and retry.')
   return text
 }
 const money = (value: number) => `INR ${value.toLocaleString('en-IN')}`
@@ -41,8 +46,9 @@ export async function createEstimatePdf(view: DiscoveryResponse, options: PdfOpt
     return value ? [{ title: question.label + (fact?.source === 'edit' ? ' (updated)' : ''), text: printable(value) }] : []
   })
   const reviewItems = [...new Set([...view.reviewItems, ...discoveryReviewItems(session)])].map(printable)
-  const work = result.work.map(item => ({ ...item, name: printable(item.name) }))
-  const catalog = printable(session.catalogVersion)
+  const work = result.work.map(item => ({ ...item, name: latinOnly(item.name) }))
+  const catalog = latinOnly(session.catalogVersion)
+  const renderComplexText = options.renderComplexText ?? renderWithCanvas
   let logo = options.logo
   if (!logo) {
     try {
@@ -82,9 +88,22 @@ export async function createEstimatePdf(view: DiscoveryResponse, options: PdfOpt
   }
   // Paragraphs can span pages. Reserve room for the heading plus two body lines;
   // never put body text into the footer or strand a heading at a page bottom.
+  type Line = string | TextLineImage
+  function wrap(text: string): Line[] {
+    if (!needsComplexRendering(text)) return pdf.splitTextToSize(text, WIDTH) as string[]
+    let lines: TextLineImage[]
+    try { lines = renderComplexText(text, { widthMm: WIDTH, fontSizePt: 10, color: MUTED, lineHeightMm: LEADING }) }
+    catch (failure) { throw new Error(COMPLEX_TEXT_FAILED, { cause: failure }) }
+    if (!lines.length || lines.some(line => !line.data.startsWith('data:image/png') || !(line.widthMm > 0) || line.widthMm > WIDTH + 1 || !(line.heightMm > 0) || !(line.baselineMm >= 0))) throw new Error(COMPLEX_TEXT_FAILED)
+    return lines
+  }
+  function draw(line: Line) {
+    if (typeof line === 'string') pdf.text(line, LEFT, y)
+    else pdf.addImage(line.data, 'PNG', LEFT, y - line.baselineMm, line.widthMm, line.heightMm, undefined, 'FAST')
+  }
   function section(title: string, paragraphs: string[]) {
     font(10)
-    const wrapped = paragraphs.map(text => pdf.splitTextToSize(printable(text), WIDTH) as string[])
+    const wrapped = paragraphs.map(text => wrap(printable(text)))
     const blockHeight = 9 + wrapped.reduce((sum, lines) => sum + lines.length * LEADING + 3, 0) + 5
     // Keep short sections together; only genuinely long answers need splitting.
     if (y + 17 > BOTTOM || (blockHeight <= BOTTOM - 68 && y + blockHeight > BOTTOM)) newPage()
@@ -96,7 +115,7 @@ export async function createEstimatePdf(view: DiscoveryResponse, options: PdfOpt
     for (const lines of wrapped) {
       for (const line of lines) {
         if (y > BOTTOM) { newPage(); heading(true); font(10, false, MUTED) }
-        pdf.text(line, LEFT, y); y += LEADING
+        draw(line); y += LEADING
       }
       y += 3
     }
