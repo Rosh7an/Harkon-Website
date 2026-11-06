@@ -76,13 +76,16 @@ export async function POST(req: Request) {
       }
       catch (error) { throw new DiscoveryValidationError(error instanceof Error ? error.message : 'Invalid requirement answers.') }
       const answer = updated.answers!.priority!
+      // Collecting: a failure keeps the last question pending. Re-reviewing from
+      // the review screen: keep the customer on review; retry_ai re-runs it.
+      const pending = session.stage === 'review' ? undefined : { field: 'priority' as const, action: 'answer' as const }
       try {
         const output = await guardedConsult(client, updated, answer)
         if (output) updated = applyAgentOutput(updated, output)
-        else { updated.providerStatus = 'guided_fallback'; reportAIReviewFailure(updated, undefined, requestId, { field: 'priority', action: 'answer' }) }
+        else { updated.providerStatus = 'guided_fallback'; reportAIReviewFailure(updated, undefined, requestId, pending) }
       } catch (error) {
         updated.providerStatus = 'guided_fallback'
-        reportAIReviewFailure(updated, error, requestId, { field: 'priority', action: 'answer' })
+        reportAIReviewFailure(updated, error, requestId, pending)
       }
       return respond(updated, { requestId, aiAttempted: true })
     }

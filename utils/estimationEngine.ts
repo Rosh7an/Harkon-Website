@@ -20,6 +20,10 @@ export interface FeatureDefinition {
   name: string;
   baseHoursRange: HoursRange;
   integrationWeight: number; // 1-5
+  // Structural work (shared foundation, interfaces, per-interface adapters,
+  // coordination) is not an integration choice. Counting it in the average
+  // made the surcharge shrink as projects grew, so it can opt out.
+  excludeFromIntegrationAverage?: boolean;
   followUps?: FollowUp[];
 }
 
@@ -71,6 +75,7 @@ export function calculateEstimate(
 
   let rawFeatureTotal = 0;
   let totalIntegrationWeight = 0;
+  let integrationItems = 0;
   
   for (const feature of selectedFeatures) {
     const { low, likely, high } = feature.baseHoursRange ?? {}
@@ -101,12 +106,15 @@ export function calculateEstimate(
     
     const pertHours = (feature.baseHoursRange.low + 4 * feature.baseHoursRange.likely + feature.baseHoursRange.high) / 6;
     rawFeatureTotal += (pertHours + adjustment);
-    totalIntegrationWeight += feature.integrationWeight;
+    if (!feature.excludeFromIntegrationAverage) {
+      totalIntegrationWeight += feature.integrationWeight;
+      integrationItems++;
+    }
   }
   
   let surcharge = 0;
-  if (selectedFeatures.length >= 2) {
-    const avgIntegrationWeight = totalIntegrationWeight / selectedFeatures.length;
+  if (selectedFeatures.length >= 2 && integrationItems > 0) {
+    const avgIntegrationWeight = totalIntegrationWeight / integrationItems;
     // surcharge = rawFeatureTotal * (0.05 * (avgIntegrationWeight - 1))
     surcharge = rawFeatureTotal * (0.05 * Math.max(0, avgIntegrationWeight - 1));
     const maxSurcharge = rawFeatureTotal * 0.30;

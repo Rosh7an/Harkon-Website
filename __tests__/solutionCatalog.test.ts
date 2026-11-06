@@ -81,3 +81,38 @@ describe('solution composition', () => {
     expect(() => parseEstimateRequest({ ...base, featureIds: ['constructor'] })).toThrow(/unknown/)
   })
 })
+
+describe('integration surcharge', () => {
+  const surchargeShare = (scope: Parameters<typeof estimateSolution>[0]) => {
+    const result = estimateSolution(scope)
+    return result.surcharge / result.rawFeatureTotal
+  }
+  it('does not shrink when the same features are offered on more interfaces', () => {
+    const capabilityIds = ['crm', 'accounts', 'booking', 'reports'] as const
+    const one = parseScope({ ...emptyScope(), surfaceIds: ['portal'], capabilityIds: [...capabilityIds] })
+    const three = parseScope({ ...emptyScope(), surfaceIds: ['portal', 'admin', 'mobile'], capabilityIds: [...capabilityIds] })
+    // Average weight (4 + 4 + 3 + 3) / 4 = 3.5, so 5% x 2.5 = 12.5% in both.
+    expect(surchargeShare(one)).toBeCloseTo(0.125, 10)
+    expect(surchargeShare(three)).toBeCloseTo(0.125, 10)
+  })
+  it('adds no surcharge when only interfaces are chosen', () => {
+    expect(estimateSolution(parseScope({ ...emptyScope(), surfaceIds: ['website'] })).surcharge).toBe(0)
+    expect(estimateSolution(parseScope({ ...emptyScope(), surfaceIds: ['website', 'portal', 'mobile'] })).surcharge).toBe(0)
+  })
+  it('matches the hand-checked website + booking estimate', () => {
+    // Work 20 + 30 + 30 + 4 = 84h; surcharge 10% = 8.4h; QA 13.86h; PM 9.24h; setup 8h = 123.5h.
+    const result = estimateSolution(parseScope({ ...emptyScope(), surfaceIds: ['website'], capabilityIds: ['booking'] }))
+    expect(result.rawFeatureTotal).toBeCloseTo(84, 10)
+    expect(result.surcharge).toBeCloseTo(8.4, 10)
+    expect(result.subtotal).toBeCloseTo(123.5, 10)
+    expect(result.lowEstimateHours).toBeCloseTo(136.4675, 6)
+    expect(result.highEstimateHours).toBeCloseTo(192.66, 6)
+    expect([result.lowEstimateCost, result.highEstimateCost]).toEqual([32800, 46200])
+    expect(result.weeks).toEqual({ low: 7, high: 8 })
+  })
+  it('reaches 20% when every chosen item has the highest weight', () => {
+    // Offline and SSO both weigh 5: 5% x 4 = 20%.
+    expect(surchargeShare(parseScope({ ...emptyScope(), surfaceIds: ['mobile'], modifierIds: ['offline', 'sso'] }))).toBeCloseTo(0.2, 10)
+  })
+})
+

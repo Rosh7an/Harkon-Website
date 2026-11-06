@@ -16,15 +16,20 @@ interface Item extends FeatureDefinition {
 function item(id: string, name: string, description: string, low: number, likely: number, high: number, weight = 1): Item {
   return { id, name, description, baseHoursRange: { low, likely, high }, integrationWeight: weight }
 }
+// The integration surcharge reflects the chosen capabilities, integrations and
+// modifiers only, so adding interfaces cannot dilute it.
+function structural(entry: Item): Item {
+  return { ...entry, excludeFromIntegrationAverage: true }
+}
 
 // Provisional allocations: archetype foundations are split into one shared core plus
 // surface work. New capabilities/adapters need calibration against completed projects.
-export const FOUNDATION = item('foundation', 'Shared solution foundation', 'Planning, shared design conventions and one common data/API foundation where needed.', 15, 20, 25)
+export const FOUNDATION = structural(item('foundation', 'Shared solution foundation', 'Planning, shared design conventions and one common data/API foundation where needed.', 15, 20, 25))
 export const SURFACES: Record<SurfaceId, Item> = {
-  website: item('website', 'Public website', 'Explain your business, publish content and capture enquiries.', 25, 30, 35),
-  portal: item('portal', 'Customer or staff web portal', 'A browser-based workspace for customers or your team.', 45, 50, 55),
-  mobile: item('mobile', 'Mobile app', 'A cross-platform app for iOS and Android.', 165, 190, 215),
-  admin: item('admin', 'Admin console', 'A separate management interface for back-office staff.', 25, 30, 35),
+  website: structural(item('website', 'Public website', 'Explain your business, publish content and capture enquiries.', 25, 30, 35)),
+  portal: structural(item('portal', 'Customer or staff web portal', 'A browser-based workspace for customers or your team.', 45, 50, 55)),
+  mobile: structural(item('mobile', 'Mobile app', 'A cross-platform app for iOS and Android.', 165, 190, 215)),
+  admin: structural(item('admin', 'Admin console', 'A separate management interface for back-office staff.', 25, 30, 35)),
 }
 export const CAPABILITIES: Record<CapabilityId, Item> = {
   crm: { ...item('crm', 'Custom CRM and lead management', 'Track customers, lead ownership and follow-up. Existing CRM connections are selected separately.', 30, 40, 55, 4), surfaces: ['portal', 'admin', 'mobile'], adapters: { portal: 12, admin: 12, mobile: 18 } },
@@ -150,14 +155,14 @@ export function resolveWork(scope: SolutionScope): FeatureDefinition[] {
     work.push(capability)
     for (const surface of scope.surfaceIds) {
       const hours = capability.adapters?.[surface]
-      if (hours) work.push(item(`${id}:${surface}`, `${capability.name}: ${SURFACES[surface].name} interface`, '', hours, hours, hours))
+      if (hours) work.push(structural(item(`${id}:${surface}`, `${capability.name}: ${SURFACES[surface].name} interface`, '', hours, hours, hours)))
     }
   }
   work.push(...scope.integrationIds.map(id => INTEGRATIONS[id]), ...scope.modifierIds.map(id => MODIFIERS[id]))
-  if (scope.capabilityIds.includes('payments') && scope.billing === 'recurring') work.push(item('recurring_billing', 'Recurring billing setup', '', 8, 8, 8))
+  if (scope.capabilityIds.includes('payments') && scope.billing === 'recurring') work.push(structural(item('recurring_billing', 'Recurring billing setup', '', 8, 8, 8)))
   if (scope.surfaceIds.length > 1) {
     const hours = (scope.surfaceIds.length - 1) * 8
-    work.push(item('coordination', 'Cross-surface coordination and acceptance checks', '', hours, hours, hours))
+    work.push(structural(item('coordination', 'Cross-surface coordination and acceptance checks', '', hours, hours, hours)))
   }
   return work
 }

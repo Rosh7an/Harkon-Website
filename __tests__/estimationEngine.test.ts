@@ -110,4 +110,20 @@ describe('calculateEstimate', () => {
     expect(() => calculateEstimate([mockFeatures[0]], {}, -1, 240, 1)).toThrow(RangeError);
     expect(() => calculateEstimate([mockFeatures[0]], {}, 1.3, -240, 1)).toThrow(RangeError);
   });
+
+  describe('structural items in the integration average', () => {
+    const feature = (id: string, likely: number, weight: number, structural = false): FeatureDefinition => ({ id, name: id, baseHoursRange: { low: likely, likely, high: likely }, integrationWeight: weight, ...(structural ? { excludeFromIntegrationAverage: true } : {}) })
+    it('averages only non-structural items, but applies the surcharge to all work', () => {
+      const result = calculateEstimate([feature('base', 100, 1, true), feature('crm', 50, 5)], {}, 1, 1, 1)
+      // Average weight 5 -> 20% of 150h.
+      expect(result.surcharge).toBeCloseTo(30, 10)
+    })
+    it('adds no surcharge when every item is structural', () => {
+      expect(calculateEstimate([feature('a', 10, 5, true), feature('b', 10, 5, true)], {}, 1, 1, 1).surcharge).toBe(0)
+    })
+    it('keeps legacy behaviour when no item uses the flag', () => {
+      // (1 + 5) / 2 = 3 -> 10% of 20h.
+      expect(calculateEstimate([feature('a', 10, 1), feature('b', 10, 5)], {}, 1, 1, 1).surcharge).toBeCloseTo(2, 10)
+    })
+  })
 });

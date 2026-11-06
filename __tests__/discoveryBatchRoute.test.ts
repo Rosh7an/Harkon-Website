@@ -109,5 +109,31 @@ describe('one AI review for all seven answers', () => {
     expect((await send({ action: 'review_answers', token: manual.token, revision: 0, answers })).status).toBe(400)
     expect(consult).not.toHaveBeenCalled()
   })
+  it('keeps the customer on the review screen when re-reviewing edited answers fails, and keeps their chosen features on retry', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    let view = (await send({ action: 'start', mode: 'guided' })).data
+    view = (await send({ action: 'review_answers', token: view.token, revision: 0, answers })).data
+    expect(view.session.stage).toBe('review')
+    const chosen = { ...emptyScope(), surfaceIds: ['portal'], capabilityIds: ['crm'] }
+    const edited = { ...answers, business: 'Two shops' }
+    view = (await send({ action: 'edit', token: view.token, revision: view.session.revision, field: 'business', value: edited.business, scope: chosen })).data
+    expect(view.session.requirementsDirty).toBe(true)
+
+    vi.mocked(consult).mockRejectedValueOnce(Object.assign(new Error('private'), { status: 500 }))
+    const failed = await send({ action: 'review_answers', token: view.token, revision: view.session.revision, answers: edited, scope: chosen })
+    expect(failed.status).toBe(502)
+    expect(failed.data.session.stage).toBe('review')
+    expect(failed.data.question).toBeNull()
+    expect(failed.data.session.pendingAIReview).toBeUndefined()
+    expect(failed.data.session.answers).toEqual(edited)
+    expect((await send({ action: 'confirm', token: failed.data.token, revision: failed.data.session.revision, confirmed: true, scope: chosen })).status).toBe(409)
+
+    const retried = await send({ action: 'retry_ai', token: failed.data.token, revision: failed.data.session.revision, scope: chosen })
+    expect(retried.status).toBe(200)
+    expect(retried.data.session.stage).toBe('review')
+    expect(retried.data.session.scope.capabilityIds).toEqual(['crm'])
+    expect(vi.mocked(consult).mock.calls.at(-1)![0].answers).toEqual(edited)
+    vi.restoreAllMocks()
+  })
 })
 

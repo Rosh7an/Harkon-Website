@@ -116,10 +116,29 @@ export function missingCriticalFacts(session: DiscoverySession): string[] {
   if (session.mode === 'manual') return []
   return QUESTIONS.filter(question => ['pain', 'workflow', 'users', 'constraints'].includes(question.id) && (!session.facts[question.id] || session.facts[question.id]?.status === 'unknown')).map(question => `${question.label} still needs confirmation.`)
 }
+// The plan form always asks these two choices, and reviewScope() adds its own
+// item while either is undecided. An AI item asking the same thing is always
+// redundant, and once stored it blocked full confirmation after the customer
+// had answered. The model tags them; these patterns catch saved sessions and
+// untagged wording.
+export const REVIEW_ITEM_TOPICS = ['billing_choice', 'crm_provider_choice', 'other'] as const
+const PAYMENT_WORD = /\b(?:pay|payments?|billing|billed|charges?|charging|subscriptions?)\b/i
+const ONE_TIME = /\bone[- ]?(?:time|off)\b/i
+const RECURRING = /\b(?:recurring|subscriptions?|monthly|repeat)\b/i
+const BILLING_TYPE = /\b(?:billing|payment)\s+(?:type|model|frequency|cycle)s?\b/i
+const CRM_QUESTION = /\b(?:which|what)\s+(?:existing\s+)?(?:crm|customer[- ]system)\b|\bcrm\s+(?:provider|platform|vendor)s?\b/i
+const CRM_PROVIDERS = [/\bhubspot\b/i, /\bsalesforce\b/i, /\bzoho\b/i]
+const DATA_WORK = /\b(?:migrat\w*|import\w*|export\w*|sync\w*|data)\b/i
+export function asksFormChoice(item: string): boolean {
+  const billing = (PAYMENT_WORD.test(item) && ONE_TIME.test(item) && RECURRING.test(item)) || BILLING_TYPE.test(item)
+  const providersNamed = CRM_PROVIDERS.filter(pattern => pattern.test(item)).length
+  const crm = !DATA_WORK.test(item) && (CRM_QUESTION.test(item) || providersNamed >= 2)
+  return billing || crm
+}
 // Older encrypted drafts stored an AI outage as an unresolved requirement.
 // Provider availability is separate from unresolved customer requirements.
 export function requirementReviewItems(items: string[]): string[] {
-  return items.filter(item => !item.startsWith('AI scope mapping was unavailable.'))
+  return items.filter(item => !item.startsWith('AI scope mapping was unavailable.') && !asksFormChoice(item))
 }
 export function manualReviewItems(session: DiscoverySession): string[] {
   const facts = Object.values(session.facts).map(fact => fact?.value ?? '').join(' ')
@@ -153,6 +172,35 @@ export interface AgentOutput {
   reviewItems: { text: string; evidence: string }[]
 }
 const recommendationCatalogs = { surfaceIds: SURFACES, capabilityIds: CAPABILITIES, integrationIds: INTEGRATIONS, modifierIds: MODIFIERS }
+// Letters, digits and combining marks (needed for Malayalam and other scripts).
+const WORD_CHARACTER = /[\p{L}\p{N}\p{M}]/u
+export const MIN_EVIDENCE_CHARACTERS = 3
+export const LONG_EVIDENCE_CHARACTERS = 12
+function significantLength(text: string): number {
+  return text.match(/[\p{L}\p{N}]/gu)?.length ?? 0
+}
+/**
+ * Whether model-supplied evidence is a meaningful quote from the customer's
+ * answer. A plain substring check accepted one-letter quotes such as "a", or
+ * "pay" inside "repayment". Short quotes must be whole words of at least three
+ * letters or digits; long quotes are distinctive enough as plain substrings.
+ */
+export function isQuotedEvidence(evidence: string, source: string): boolean {
+  const quote = evidence.trim()
+  if (!quote) return false
+  if (quote === source.trim()) return true
+  const length = significantLength(quote)
+  if (length < MIN_EVIDENCE_CHARACTERS) return false
+  if (length >= LONG_EVIDENCE_CHARACTERS) return source.includes(quote)
+  const needsStartBoundary = WORD_CHARACTER.test(quote[0])
+  const needsEndBoundary = WORD_CHARACTER.test(quote.at(-1)!)
+  for (let index = source.indexOf(quote); index !== -1; index = source.indexOf(quote, index + 1)) {
+    const before = index > 0 ? source[index - 1] : ''
+    const after = source[index + quote.length] ?? ''
+    if ((!needsStartBoundary || !WORD_CHARACTER.test(before)) && (!needsEndBoundary || !WORD_CHARACTER.test(after))) return true
+  }
+  return false
+}
 export function validateAgentOutput(value: unknown, answer: string, currentAnswers: readonly string[] = []): AgentOutput {
   const evidenceSources = [answer, ...currentAnswers]
   if (!isRecord(value)) throw new DiscoveryValidationError('The assistant returned an invalid response.')
@@ -162,7 +210,7 @@ export function validateAgentOutput(value: unknown, answer: string, currentAnswe
   for (const entry of value.facts) {
     if (!isRecord(entry) || !isFactId(entry.field)) throw new DiscoveryValidationError('The assistant returned invalid fact fields.')
     const evidence = boundedText(entry.evidence)
-    if (!evidenceSources.some(source => source.includes(evidence))) throw new DiscoveryValidationError('A fact has no supporting customer evidence.')
+    if (!evidenceSources.some(source => isQuotedEvidence(evidence, source))) throw new DiscoveryValidationError('A fact has no supporting customer evidence.')
     const value = boundedText(entry.value, 600)
     const previous = facts.find(fact => fact.field === entry.field)
     if (previous) {
@@ -184,14 +232,23 @@ export function validateAgentOutput(value: unknown, answer: string, currentAnswe
     const catalog = recommendationCatalogs[group] as Record<string, typeof SURFACES.website>
     const [id] = parseIds([entry.id], catalog, 'Recommendation')
     if (recommendations.some(item => item.id === id && item.group === group)) throw new DiscoveryValidationError('The assistant returned duplicate recommendations.')
-    recommendations.push({ group, id, reason: boundedText(entry.reason, 300), evidence: boundedText(entry.evidence, 300) })
+    const evidence = boundedText(entry.evidence, 300)
+    // Drop, rather than fail the whole review: unsupported suggestions were
+    // already discarded later, so one weak quote should not block the rest.
+    if (!evidenceSources.some(source => isQuotedEvidence(evidence, source))) continue
+    recommendations.push({ group, id, reason: boundedText(entry.reason, 300), evidence })
   }
-  const reviewItems = value.reviewItems.map(entry => {
+  const reviewItems: AgentOutput['reviewItems'] = []
+  for (const entry of value.reviewItems) {
     if (!isRecord(entry)) throw new DiscoveryValidationError('The assistant returned invalid review items.')
+    // Optional for existing fixtures; the provider schema requires it.
+    if (entry.topic !== undefined && !(REVIEW_ITEM_TOPICS as readonly unknown[]).includes(entry.topic)) throw new DiscoveryValidationError('The assistant returned an invalid review item topic.')
     const evidence = boundedText(entry.evidence)
-    if (!evidenceSources.some(source => source.includes(evidence))) throw new DiscoveryValidationError('A review item has no customer evidence.')
-    return { text: boundedText(entry.text, 300), evidence }
-  })
+    if (!evidenceSources.some(source => isQuotedEvidence(evidence, source))) throw new DiscoveryValidationError('A review item has no customer evidence.')
+    const text = boundedText(entry.text, 300)
+    if (entry.topic === 'billing_choice' || entry.topic === 'crm_provider_choice' || asksFormChoice(text)) continue
+    reviewItems.push({ text, evidence })
+  }
   // Optional for existing fixtures/callers; the provider schema requires this
   // field. A missing mention is never treated as a customer withdrawal.
   const excludedCapabilities: NonNullable<AgentOutput['excludedCapabilities']> = []
@@ -201,7 +258,7 @@ export function validateAgentOutput(value: unknown, answer: string, currentAnswe
       if (!isRecord(entry)) throw new DiscoveryValidationError('The assistant returned an invalid capability exclusion.')
       const [id] = parseIds([entry.id], CAPABILITIES, 'Capability exclusion')
       const evidence = boundedText(entry.evidence, 300)
-      if (!evidenceSources.some(source => source.includes(evidence))) throw new DiscoveryValidationError('A capability exclusion has no supporting customer evidence.')
+      if (!evidenceSources.some(source => isQuotedEvidence(evidence, source))) throw new DiscoveryValidationError('A capability exclusion has no supporting customer evidence.')
       if (excludedCapabilities.some(item => item.id === id) || recommendations.some(item => item.group === 'capabilityIds' && item.id === id)) throw new DiscoveryValidationError('The assistant returned conflicting capability decisions.')
       excludedCapabilities.push({ id, evidence })
     }
