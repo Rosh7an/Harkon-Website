@@ -4,23 +4,14 @@ import { randomUUID } from 'node:crypto'
 import { QUESTIONS, applyAgentOutput, boundedText, createDiscovery, customerAnswers, DiscoveryValidationError, discoveryReviewItems, editFact, nextQuestion, originalRequirementAnswers, recordAnswer, requirementReviewItems, requiresAIReview, type DiscoverySession } from '@/utils/discovery'
 import { aiReviewFailureMessage, aiReviewFailureReason, aiReviewHttpStatus, aiReviewProviderDetails, retrySecondsRemaining, type AIReviewOutcome } from '@/utils/discoveryAIStatus'
 import { requestedSurfaceIntents } from '@/utils/discoverySurfaceIntent'
-import { consult } from '@/utils/discoveryAgent.server'
+import { guardedConsult } from '@/utils/discoveryAIGuard.server'
+import { clientIp, createRateLimiter, isSameOriginRequest, retryAfterSeconds } from '@/utils/requestGuard.server'
 import { DiscoverySessionError, openSession, sealSession } from '@/utils/discoverySession.server'
 import { clearInactiveAnswers, estimateSolution, isRecord, parseScope, reviewScope, SolutionValidationError } from '@/utils/solutionCatalog'
 
 export const runtime = 'nodejs'
 // Per-instance abuse guard. Deployment-wide rate limits belong at the hosting firewall.
-const requests = new Map<string, { count: number; resetAt: number }>()
-function allowRequest(req: Request): boolean {
-  const now = Date.now()
-  for (const [key, entry] of requests) if (entry.resetAt <= now) requests.delete(key)
-  const ip = (req.headers.get('x-forwarded-for') || 'local').split(',')[0].trim().slice(0, 100)
-  if (requests.size >= 1000 && !requests.has(ip)) return false
-  const current = requests.get(ip) ?? { count: 0, resetAt: now + 10 * 60 * 1000 }
-  current.count++
-  requests.set(ip, current)
-  return current.count <= 60
-}
+const requests = createRateLimiter({ limit: 60, windowMs: 10 * 60 * 1000 })
 function respond(session: DiscoverySession, context?: { requestId: string; aiAttempted: true }) {
   const requestId = context?.requestId ?? randomUUID()
   const failed = context?.aiAttempted && session.providerStatus === 'guided_fallback'
@@ -49,19 +40,10 @@ function reportAIReviewFailure(session: DiscoverySession, error: unknown, reques
 export async function POST(req: Request) {
   const requestId = randomUUID()
   try {
-    const origin = req.headers.get('origin')
-    if (origin) {
-      let sameSite = false
-      try {
-        const originUrl = new URL(origin)
-        // Next/proxies can reconstruct req.url with an internal hostname. Browsers
-        // send Host for the actual public address; never compare to that internal URL.
-        const host = req.headers.get('host') || new URL(req.url).host
-        sameSite = ['http:', 'https:'].includes(originUrl.protocol) && originUrl.host === host
-      } catch { /* Invalid origins are denied rather than causing an internal error. */ }
-      if (!sameSite) return NextResponse.json({ error: 'This request must come from this website.' }, { status: 403 })
-    }
-    if (!allowRequest(req)) return NextResponse.json({ error: 'Please pause before continuing. Your answers are saved.' }, { status: 429 })
+    if (!isSameOriginRequest(req)) return NextResponse.json({ error: 'This request must come from this website.' }, { status: 403 })
+    const client = clientIp(req)
+    const allowance = requests.take(client)
+    if (!allowance.allowed) return NextResponse.json({ error: 'Please pause before continuing. Your answers are saved.' }, { status: 429, headers: { 'Cache-Control': 'no-store', 'Retry-After': retryAfterSeconds(allowance.resetAt) } })
     const raw = await req.text()
     if (raw.length > 430000) return NextResponse.json({ error: 'Request is too large.' }, { status: 413 })
     const body: unknown = JSON.parse(raw)
@@ -95,7 +77,7 @@ export async function POST(req: Request) {
       catch (error) { throw new DiscoveryValidationError(error instanceof Error ? error.message : 'Invalid requirement answers.') }
       const answer = updated.answers!.priority!
       try {
-        const output = await consult(updated, answer)
+        const output = await guardedConsult(client, updated, answer)
         if (output) updated = applyAgentOutput(updated, output)
         else { updated.providerStatus = 'guided_fallback'; reportAIReviewFailure(updated, undefined, requestId, { field: 'priority', action: 'answer' }) }
       } catch (error) {
@@ -117,7 +99,7 @@ export async function POST(req: Request) {
       const scope = parseScope(body.scope)
       let updated: DiscoverySession = { ...session, scope, revision: session.revision + 1, allowPartial: false }
       try {
-        const output = await consult(updated, answer)
+        const output = await guardedConsult(client, updated, answer)
         if (output) updated = session.pendingAIReview?.action === 'answer' ? applyAgentOutput(updated, output) : { ...applyAgentOutput(updated, output), scope }
         else { updated.providerStatus = 'guided_fallback'; reportAIReviewFailure(updated, undefined, requestId) }
       } catch (error) {
@@ -132,7 +114,7 @@ export async function POST(req: Request) {
       let updated = recordAnswer(session, answer)
       if (session.reviewMode === 'batch' && nextQuestion(updated)) return respond(updated)
       try {
-        const output = await consult(updated, answer)
+        const output = await guardedConsult(client, updated, answer)
         if (output) updated = applyAgentOutput(updated, output)
         else { updated.providerStatus = 'guided_fallback'; reportAIReviewFailure(updated, undefined, requestId, field ? { field, action: 'answer' } : undefined) }
       } catch (error) {
@@ -156,7 +138,7 @@ export async function POST(req: Request) {
       const field = QUESTIONS.find(question => question.id === body.field)?.id
       if (session.reviewMode === 'batch' || body.deferAI === true) return respond({ ...updated, reviewMode: 'batch', requirementsDirty: session.stage === 'review' || session.requirementsDirty === true })
       try {
-        const output = await consult(updated, answer)
+        const output = await guardedConsult(client, updated, answer)
         if (output) updated = applyAgentOutput(updated, output)
         else { updated.providerStatus = 'guided_fallback'; reportAIReviewFailure(updated, undefined, requestId, field ? { field, action: 'edit' } : undefined) }
       } catch (error) {

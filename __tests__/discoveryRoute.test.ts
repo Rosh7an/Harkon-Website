@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('../utils/discoveryAgent.server', () => ({ consult: vi.fn() }))
+import { resetAIGuard } from '../utils/discoveryAIGuard.server'
 import { consult } from '../utils/discoveryAgent.server'
 import { POST } from '../app/api/discovery/route'
 import { emptyScope } from '../utils/solutionCatalog'
@@ -21,7 +22,7 @@ async function legacySend(body: unknown) {
   }
   return result
 }
-beforeEach(() => { testClient++; vi.mocked(consult).mockReset().mockResolvedValue({ acknowledgment: 'Reviewed.', facts: [], recommendations: [], reviewItems: [] }) })
+beforeEach(() => { resetAIGuard(); testClient++; vi.mocked(consult).mockReset().mockResolvedValue({ acknowledgment: 'Reviewed.', facts: [], recommendations: [], reviewItems: [] }) })
 describe('discovery API', () => {
   it('keeps the failed question pending, enforces cooldown and advances only after a successful retry', async () => {
     const started = Date.now()

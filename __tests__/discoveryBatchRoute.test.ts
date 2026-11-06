@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('../utils/discoveryAgent.server', () => ({ consult: vi.fn() }))
+import { resetAIGuard } from '../utils/discoveryAIGuard.server'
 import { consult } from '../utils/discoveryAgent.server'
 import { POST } from '../app/api/discovery/route'
 import { emptyScope } from '../utils/solutionCatalog'
@@ -9,7 +10,7 @@ async function send(body: unknown) {
   const response = await POST(new Request('http://localhost/api/discovery', { method: 'POST', headers: { 'x-forwarded-for': `198.51.100.${client}` }, body: JSON.stringify(body) }))
   return { status: response.status, data: await response.json() }
 }
-beforeEach(() => { client++; vi.mocked(consult).mockReset().mockResolvedValue({ acknowledgment: 'Reviewed all answers.', facts: [], recommendations: [], reviewItems: [] }) })
+beforeEach(() => { resetAIGuard(); client++; vi.mocked(consult).mockReset().mockResolvedValue({ acknowledgment: 'Reviewed all answers.', facts: [], recommendations: [], reviewItems: [] }) })
 describe('one AI review for all seven answers', () => {
   it('saves corrections without AI, restores them, blocks stale confirmation and reviews the whole batch once', async () => {
     let view = (await send({ action: 'start', mode: 'guided' })).data

@@ -4,10 +4,12 @@ vi.mock('resend', () => ({ Resend: class { emails = { send: mocks.send } } }))
 import { POST } from '../app/api/send-query/route'
 import { CONTACT_MESSAGE_MAX } from '../utils/contactLimits'
 
+let client = 0
 async function send(body: unknown) {
+  client++
   vi.stubEnv('CONTACT_EMAIL', 'team@example.test')
   vi.stubEnv('RESEND_API_KEY', 'synthetic-key')
-  return POST(new Request('http://localhost/api/send-query', { method: 'POST', body: JSON.stringify(body) }))
+  return POST(new Request('http://localhost/api/send-query', { method: 'POST', headers: { 'x-forwarded-for': `203.0.113.${client}` }, body: JSON.stringify(body) }))
 }
 afterEach(() => { vi.unstubAllEnvs(); vi.clearAllMocks() })
 const valid = { name: 'Asha', email: 'asha@example.test', phone: '+91 9876543210', message: 'Please review this fictional project.' }
@@ -49,4 +51,25 @@ describe('proposal contact boundary', () => {
     expect((await send(valid)).status).toBe(502)
     vi.restoreAllMocks()
   })
+
+  it('refuses other websites without sending', async () => {
+    vi.stubEnv('CONTACT_EMAIL', 'team@example.test')
+    vi.stubEnv('RESEND_API_KEY', 'synthetic-key')
+    const response = await POST(new Request('http://localhost/api/send-query', { method: 'POST', headers: { host: 'localhost', origin: 'https://evil.example', 'x-forwarded-for': '198.51.100.200' }, body: JSON.stringify(valid) }))
+    expect(response.status).toBe(403)
+    expect(mocks.send).not.toHaveBeenCalled()
+  })
+
+  it('limits each address to 5 messages per window, even with a spoofed first forwarded address', async () => {
+    vi.stubEnv('CONTACT_EMAIL', 'team@example.test')
+    vi.stubEnv('RESEND_API_KEY', 'synthetic-key')
+    mocks.send.mockResolvedValue({ error: null })
+    const post = (spoofed: number) => POST(new Request('http://localhost/api/send-query', { method: 'POST', headers: { 'x-forwarded-for': `6.6.6.${spoofed}, 198.51.100.201` }, body: JSON.stringify(valid) }))
+    for (let i = 0; i < 5; i++) expect((await post(i)).status).toBe(200)
+    const limited = await post(99)
+    expect(limited.status).toBe(429)
+    expect(Number(limited.headers.get('retry-after'))).toBeGreaterThan(0)
+    expect(mocks.send).toHaveBeenCalledTimes(5)
+  })
 })
+

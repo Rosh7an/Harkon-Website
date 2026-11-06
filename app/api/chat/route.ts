@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import Groq from 'groq-sdk'
 import { SYSTEM_PROMPT_AI } from '@/app/constant'
+import { clientIp, createRateLimiter, isSameOriginRequest, retryAfterSeconds } from '@/utils/requestGuard.server'
 
 // Prefer the server-only name. The legacy value is read only in this server route so
 // existing deployments keep working while their environment configuration is migrated.
@@ -23,7 +24,17 @@ function parseHistory(value: unknown): ChatMessage[] | null {
   return messages
 }
 
+// Every accepted request is a paid AI call on our key. No page currently uses
+// this route; refuse other websites and cap each address per server instance.
+const CHAT_LIMIT = 20
+const limiter = createRateLimiter({ limit: CHAT_LIMIT, windowMs: 10 * 60 * 1000 })
+
 export async function POST(req: Request) {
+  if (!isSameOriginRequest(req)) return NextResponse.json({ error: 'This request must come from this website.' }, { status: 403 })
+  const allowance = limiter.take(clientIp(req))
+  if (!allowance.allowed) {
+    return NextResponse.json({ error: 'AI request limit reached. Please wait and try again.' }, { status: 429, headers: { 'Retry-After': retryAfterSeconds(allowance.resetAt) } })
+  }
   try {
     if (!apiKey) {
       throw new Error('No Groq API Key')

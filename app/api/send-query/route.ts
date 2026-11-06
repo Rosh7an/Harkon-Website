@@ -1,8 +1,19 @@
 import { NextResponse } from 'next/server'
 import { Resend } from 'resend'
 import { CONTACT_MESSAGE_MAX } from '@/utils/contactLimits'
+import { clientIp, createRateLimiter, isSameOriginRequest, retryAfterSeconds } from '@/utils/requestGuard.server'
+
+// Each accepted request sends an email, so keep the per-address budget small.
+// Per-instance only; add a platform rate limit or bot check for full coverage.
+const SEND_QUERY_LIMIT = 5
+const limiter = createRateLimiter({ limit: SEND_QUERY_LIMIT, windowMs: 10 * 60 * 1000 })
 
 export async function POST(req: Request) {
+  if (!isSameOriginRequest(req)) return NextResponse.json({ error: 'This request must come from this website.' }, { status: 403 })
+  const allowance = limiter.take(clientIp(req))
+  if (!allowance.allowed) {
+    return NextResponse.json({ error: 'Too many messages sent. Please wait a few minutes and try again.' }, { status: 429, headers: { 'Retry-After': retryAfterSeconds(allowance.resetAt) } })
+  }
   const to = process.env.CONTACT_EMAIL || process.env.NEXT_PUBLIC_CONTACT_EMAIL
   const apiKey = process.env.RESEND_API_KEY
 
