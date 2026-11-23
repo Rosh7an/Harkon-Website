@@ -66,6 +66,14 @@ describe('createRateLimiter', () => {
     // 'old' had expired, so 'live' survived and is still at its limit.
     expect(limiter.take('live', 170).allowed).toBe(false)
   })
+  it('forgets addresses as soon as their window ends, even when the table is not full', () => {
+    const limiter = createRateLimiter({ limit: 5, windowMs: 100 })
+    limiter.take('a', 0)
+    limiter.take('b', 10)
+    expect(limiter.size()).toBe(2)
+    limiter.take('c', 150)
+    expect(limiter.size()).toBe(1)
+  })
   it('reset clears every key', () => {
     const limiter = createRateLimiter({ limit: 1, windowMs: 1000 })
     limiter.take('a', 0)

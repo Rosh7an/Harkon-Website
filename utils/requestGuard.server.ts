@@ -38,6 +38,8 @@ export function isSameOriginRequest(req: Request): boolean {
 export interface RateLimitDecision { allowed: boolean; resetAt: number }
 export interface RateLimiter {
   take(key: string, now?: number): RateLimitDecision
+  /** Number of addresses currently remembered. */
+  size(): number
   reset(): void
 }
 
@@ -51,22 +53,26 @@ export function createRateLimiter({ limit, windowMs, maxKeys = 1000 }: { limit: 
   const entries = new Map<string, { count: number; resetAt: number }>()
   return {
     take(key, now = Date.now()) {
+      // Forget addresses as soon as their window ends (the Privacy Policy says
+      // so). Every window has the same length and renewed keys are re-added at
+      // the end, so the Map is ordered by expiry: stop at the first live key.
+      for (const [storedKey, stored] of entries) {
+        if (stored.resetAt > now) break
+        entries.delete(storedKey)
+      }
       const existing = entries.get(key)
-      if (existing && existing.resetAt > now) {
+      if (existing) {
         if (existing.count >= limit) return { allowed: false, resetAt: existing.resetAt }
         existing.count++
         return { allowed: true, resetAt: existing.resetAt }
       }
-      if (existing) entries.delete(key)
-      if (entries.size >= maxKeys) {
-        for (const [storedKey, entry] of entries) if (entry.resetAt <= now) entries.delete(storedKey)
-        // Map iterates in insertion order, so the first key is the oldest window.
-        while (entries.size >= maxKeys) entries.delete(entries.keys().next().value as string)
-      }
+      // Map iterates in insertion order, so the first key is the oldest window.
+      while (entries.size >= maxKeys) entries.delete(entries.keys().next().value as string)
       const entry = { count: 1, resetAt: now + windowMs }
       entries.set(key, entry)
       return { allowed: true, resetAt: entry.resetAt }
     },
+    size() { return entries.size },
     reset() { entries.clear() },
   }
 }
