@@ -33,7 +33,7 @@ export async function POST(req: Request) {
   }
   const fields = body as Record<string, unknown>
   const intent = Object.hasOwn(fields, 'intent') ? fields.intent : 'query'
-  if ((intent !== 'query' && intent !== 'callback') || (fields.preferredTime !== undefined && (typeof fields.preferredTime !== 'string' || fields.preferredTime.trim().length > 200))) {
+  if ((intent !== 'query' && intent !== 'callback' && intent !== 'estimate') || (fields.preferredTime !== undefined && (typeof fields.preferredTime !== 'string' || fields.preferredTime.trim().length > 200))) {
     return NextResponse.json({ error: 'Invalid call-request fields.' }, { status: 400 })
   }
   const preferredTime = typeof fields.preferredTime === 'string' ? fields.preferredTime.trim() : ''
@@ -58,7 +58,8 @@ export async function POST(req: Request) {
 
   const html = `
     <div style="font-family: sans-serif; font-size: 14px; color: #0C2A43;">
-      <h2 style="margin: 0 0 16px;">${intent === 'callback' ? 'New team call request' : 'New query'} from the Exter Cloud website</h2>
+      <h2 style="margin: 0 0 16px;">${intent === 'callback' ? 'New team call request' : intent === 'estimate' ? 'New estimate' : 'New query'} from the Exter Cloud website</h2>
+      ${intent === 'estimate' ? '<p>The customer finished the cost estimator and sent their answers and estimate below.</p>' : ''}
       <p style="margin: 0 0 6px;"><strong>Name:</strong> ${escapeHtml(name)}</p>
       <p style="margin: 0 0 6px;"><strong>Phone:</strong> ${escapeHtml(phone)}</p>
       <p style="margin: 0 0 6px;"><strong>Email:</strong> ${escapeHtml(email)}</p>
@@ -74,7 +75,7 @@ export async function POST(req: Request) {
       from: 'Exter Cloud Website <website@extercloud.in>',
       to,
       replyTo: email,
-      subject: intent === 'callback' ? `Team call requested by ${name}` : `New query from ${name}`,
+      subject: intent === 'callback' ? `Team call requested by ${name}` : intent === 'estimate' ? `Estimate sent by ${name}` : `New query from ${name}`,
       html,
     })
 

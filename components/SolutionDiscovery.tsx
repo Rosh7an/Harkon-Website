@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 // Callback requests are paused while email delivery is unavailable.
 // import QueryModal from './QueryModal'
+import SendEstimate from './site/SendEstimate'
 import DiscoveryProgress from './DiscoveryProgress'
 import EstimatePrice from './EstimatePrice'
 import SavedAnswerEditor from './SavedAnswerEditor'
@@ -18,8 +19,8 @@ import { aiReviewFailureMessage, formatRetryDuration, retrySecondsRemaining } fr
 import type { BusinessContactLinks } from '@/utils/businessContact'
 
 export type { DiscoveryResponse } from '@/utils/discoveryDraft'
-const primary = `${styles.primary} min-h-11 px-5 py-3 rounded-xl bg-[var(--accent)] text-[var(--on-accent)] font-semibold disabled:opacity-50 disabled:cursor-not-allowed`
-const secondary = `${styles.secondary} min-h-11 px-4 py-2 rounded-xl border border-[var(--border-hi)] text-[var(--text)] hover:bg-[var(--surface)] disabled:opacity-50`
+const primary = `${styles.primary} min-h-12 px-6 py-3 rounded-full bg-[var(--accent-strong)] text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed`
+const secondary = `${styles.secondary} min-h-11 px-5 py-2 rounded-full border border-[var(--line-strong)] text-[var(--text)] hover:bg-[var(--tint)] disabled:opacity-50`
 const field = `${styles.field} query-field w-full rounded-xl border border-[var(--border-hi)] p-3 text-[var(--text)]`
 const money = (amount: number) => `₹${amount.toLocaleString('en-IN')}`
 const factLabels: Record<FactId, string> = { business: 'Your business', pain: 'What is difficult', current: 'How you do it now', workflow: 'How you want it to work', users: 'Who will use it', constraints: 'Tools and other needs', priority: 'What matters first' }
@@ -644,10 +645,11 @@ export default function SolutionDiscovery({
     finally { setExporting(false) }
   }
 
-  return <section ref={sectionRef} className={styles.plannerSection} aria-label="Cost Estimator">
+  return <section ref={sectionRef} className={styles.plannerSection} aria-label="Free cost estimator">
     <header className={styles.sectionHeading}>
-      <IntroHeading>Cost <span>Estimator</span></IntroHeading>
-      <p>Start with what’s slowing you down. We’ll help you decide what to build—no technical knowledge needed.</p>
+      <IntroHeading>Free cost <span>estimator</span></IntroHeading>
+      <p>Find out what your website, app or automation could cost. Answer a few questions in plain words and get a price range and timeline in minutes. Free, no sign-up.</p>
+      <p className={styles.startNote}>Starting a project with us? This is step one. At the end, you can send your estimate straight to us.</p>
     </header>
     <div className={styles.experience} data-active={!!session}>
     <div inert={analysing} aria-busy={analysing} data-planner-content>
@@ -875,8 +877,9 @@ export default function SolutionDiscovery({
               {/* <button className={primary} onClick={openProposal}>Request a consultation</button> */}
               <button className={`${secondary} inline-flex items-center justify-center gap-2`} disabled={exporting} onClick={() => void exportEstimate()}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><path d="M12 3v12m-5-5 5 5 5-5M4 16v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4" /></svg><span>{exporting ? 'Preparing PDF…' : 'Download PDF estimate'}</span></button>
             </div>
+            <SendEstimate summary={proposalSummary({ ...view, reviewItems, session: { ...session, scope } })} />
             <div className={styles.teamHandoff}>
-              <h3 className="font-semibold">Review it with a Solution Consultant</h3>
+              <h3 className="font-semibold">Prefer to talk first?</h3>
               <p className="text-sm text-[var(--muted)] mt-2">A consultant will help re-evaluate the AI recommendation, clarify needs versus optional wants, and shape a practical first release around the available budget.</p>
               <div className={styles.contactActions} role="group" aria-label="Contact an Exter Cloud Solution Consultant">
                 {/* <button className={secondary} onClick={openProposal}>Request a consultant call</button> */}

@@ -3,124 +3,114 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ComponentProps } from 'react'
 
-const routing = vi.hoisted(() => ({ push: vi.fn(), pathname: '/' }))
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: routing.push }), usePathname: () => routing.pathname }))
+const routing = vi.hoisted(() => ({ pathname: '/' }))
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }), usePathname: () => routing.pathname }))
 vi.mock('next/image', () => ({ default: ({ priority: _priority, ...props }: ComponentProps<'img'> & { priority?: boolean }) => <img {...props} /> }))
-import Nav from '../components/Nav'
-import Hero from '../components/Hero'
+import Nav, { NAV_LINKS, isActive } from '../components/Nav'
+import HomeHero from '../components/site/HomeHero'
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 let root: Root
 let container: HTMLDivElement
-const toggle = () => container.querySelector<HTMLButtonElement>('[aria-label="Menu"]')!
-const dialog = () => container.querySelector<HTMLDivElement>('[role="dialog"]')
-const click = async (element: HTMLElement) => { await act(async () => { element.click() }) }
 
 beforeEach(() => {
   routing.pathname = '/'
-  routing.push.mockReset()
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
-  vi.stubGlobal('innerWidth', 375)
 })
 afterEach(async () => {
   await act(async () => { root.unmount() })
   container.remove()
-  document.body.style.overflow = ''
-  vi.unstubAllGlobals()
-  vi.restoreAllMocks()
+  vi.unstubAllEnvs()
+  document.documentElement.removeAttribute('data-theme')
+  localStorage.clear()
 })
 
-describe('responsive navigation interactions', () => {
-  it.each([320, 375, 768, 1023])('opens and dismisses the menu at width %i without losing the page scroll setting', async width => {
-    vi.stubGlobal('innerWidth', width)
-    document.body.style.overflow = 'clip'
-    await act(async () => { root.render(<Nav />) })
-    expect(dialog()).toBeNull()
-    expect(toggle().getAttribute('aria-expanded')).toBe('false')
-    await click(toggle())
-    expect(toggle().getAttribute('aria-controls')).toBe(dialog()!.id)
-    expect(document.body.style.overflow).toBe('hidden')
-    expect(dialog()!.querySelector('button')).toBe(document.activeElement)
-    await act(async () => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })) })
-    expect(dialog()).toBeNull()
-    expect(document.activeElement).toBe(toggle())
-    expect(document.body.style.overflow).toBe('clip')
+const render = async (node: React.ReactNode) => { await act(async () => { root.render(node) }) }
+const mainLinks = () => [...container.querySelectorAll<HTMLAnchorElement>('nav[aria-label="Main navigation"] a')]
+const tabLinks = () => [...container.querySelectorAll<HTMLAnchorElement>('nav[aria-label="App navigation"] a')]
+
+describe('isActive', () => {
+  it('matches the page itself and pages inside it', () => {
+    expect(isActive('/services', '/services')).toBe(true)
+    expect(isActive('/services/booking', '/services')).toBe(true)
   })
-  it('keeps keyboard focus within the open menu controls', async () => {
-    await act(async () => { root.render(<Nav />) })
-    await click(toggle())
-    const buttons = dialog()!.querySelectorAll('button')
-    const last = buttons[buttons.length - 1]
-    last.focus()
-    await act(async () => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })) })
-    expect(document.activeElement).toBe(toggle())
-    await act(async () => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true })) })
-    expect(document.activeElement).toBe(last)
+  it('does not match look-alike or unrelated paths', () => {
+    expect(isActive('/services-old', '/services')).toBe(false)
+    expect(isActive('/', '/services')).toBe(false)
+    expect(isActive('/services', '/')).toBe(false)
+    expect(isActive('/', '/')).toBe(true)
+    expect(isActive('', '/about')).toBe(false)
   })
-  it('closes on desktop resize and releases the scroll lock at the breakpoint', async () => {
-    await act(async () => { root.render(<Nav />) })
-    await click(toggle())
-    vi.stubGlobal('innerWidth', 1023)
-    await act(async () => { window.dispatchEvent(new Event('resize')) })
-    expect(dialog()).not.toBeNull()
-    vi.stubGlobal('innerWidth', 1024)
-    await act(async () => { window.dispatchEvent(new Event('resize')) })
-    expect(dialog()).toBeNull()
-    expect(document.body.style.overflow).toBe('')
+})
+
+describe('Nav', () => {
+  it('links to every main page, and Start a project opens the cost estimator', async () => {
+    await render(<Nav />)
+    expect(mainLinks().map(a => a.getAttribute('href'))).toEqual(NAV_LINKS.map(link => link.href))
+    expect([...container.querySelectorAll('a[href="/cost-estimator"]')].map(a => a.textContent)).toContain('Start a project')
+    // Contact stays reachable on its own, so it is never a dead loop on the Contact page.
+    expect([...container.querySelectorAll('a[href="/contact"]')].map(a => a.textContent)).not.toContain('Start a project')
   })
-  it('closes gracefully when a home-page section is absent', async () => {
-    await act(async () => { root.render(<Nav />) })
-    await click(toggle())
-    await click([...dialog()!.querySelectorAll('button')].find(button => button.textContent === 'Services')!)
-    expect(dialog()).toBeNull()
-    expect(routing.push).not.toHaveBeenCalled()
-    expect(document.body.style.overflow).toBe('')
-  })
-  it('navigates home to the selected section from another page', async () => {
+
+  it('hides Start a project on the cost estimator itself and marks the Start tab as current', async () => {
     routing.pathname = '/cost-estimator'
-    await act(async () => { root.render(<Nav />) })
-    await click(toggle())
-    await click([...dialog()!.querySelectorAll('button')].find(button => button.textContent === 'Services')!)
-    expect(routing.push).toHaveBeenCalledWith('/#services')
-    expect(dialog()).toBeNull()
+    await render(<Nav />)
+    expect([...container.querySelectorAll('a')].map(a => a.textContent)).not.toContain('Start a project')
+    const start = tabLinks().find(a => a.getAttribute('href') === '/cost-estimator')!
+    expect(start.getAttribute('aria-current')).toBe('page')
   })
-  it.each(['/', '/cost-estimator', '/services'])('opens the dedicated cost estimator from %s', async pathname => {
-    routing.pathname = pathname
-    await act(async () => { root.render(<Nav />) })
-    expect(container.textContent).not.toContain('Solution Planner')
-    const desktop = [...container.querySelectorAll('button')].find(button => button.textContent === 'Cost Estimator')!
-    await click(desktop)
-    expect(routing.push).toHaveBeenLastCalledWith('/cost-estimator')
-    await click(toggle())
-    await click([...dialog()!.querySelectorAll('button')].find(button => button.textContent === 'Cost Estimator')!)
-    expect(routing.push).toHaveBeenLastCalledWith('/cost-estimator')
-    expect(dialog()).toBeNull()
-    expect(document.body.style.overflow).toBe('')
+
+  it('marks the current section, including nested pages', async () => {
+    routing.pathname = '/services/booking'
+    await render(<Nav />)
+    const current = mainLinks().filter(a => a.getAttribute('aria-current') === 'page')
+    expect(current.map(a => a.textContent)).toEqual(['Services'])
+    expect(tabLinks().find(a => a.getAttribute('aria-current') === 'page')!.textContent).toBe('Services')
   })
-  it('restores the previous scroll setting when an open menu unmounts', async () => {
-    document.body.style.overflow = 'auto'
-    await act(async () => { root.render(<Nav />) })
-    await click(toggle())
-    await act(async () => { root.render(null) })
-    expect(document.body.style.overflow).toBe('auto')
+
+  it('marks Home only on the home page', async () => {
+    await render(<Nav />)
+    expect(tabLinks().find(a => a.getAttribute('aria-current') === 'page')!.textContent).toBe('Home')
+    expect(mainLinks().filter(a => a.getAttribute('aria-current')).map(a => a.textContent)).toEqual(['Home'])
+  })
+
+  it('shows the WhatsApp shortcut only when a valid number is configured', async () => {
+    vi.stubEnv('NEXT_PUBLIC_WHATSAPP_PHONE', '')
+    await render(<Nav />)
+    expect(container.querySelector('a[aria-label="Chat on WhatsApp"]')).toBeNull()
+    vi.stubEnv('NEXT_PUBLIC_WHATSAPP_PHONE', '+91 98765 43210')
+    await render(<Nav key="again" />)
+    expect(container.querySelector<HTMLAnchorElement>('a[aria-label="Chat on WhatsApp"]')!.href).toMatch(/^https:\/\/wa\.me\/919876543210/)
+  })
+
+  it('switches and remembers the theme', async () => {
+    await render(<Nav />)
+    const toggle = container.querySelector<HTMLButtonElement>('button[aria-label="Switch to light theme"]')!
+    await act(async () => { toggle.click() })
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light')
+    expect(localStorage.getItem('theme')).toBe('light')
+    expect(container.querySelector('button[aria-label="Switch to dark theme"]')).not.toBeNull()
   })
 })
 
-describe('hero content and navigation', () => {
-  it('retains the banner and actions when canvas is unavailable, and tolerates missing destinations', async () => {
-    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
-    await act(async () => { root.render(<Hero />) })
-    expect(container.textContent).toContain('Digital solutions for growing businesses')
-    expect(container.querySelectorAll('.hero-stat-item')).toHaveLength(4)
-    const buttons = [...container.querySelectorAll('button')]
-    for (const button of buttons) await click(button)
-    const destination = document.createElement('section')
-    destination.id = 'services'
-    destination.scrollIntoView = vi.fn()
-    container.append(destination)
-    await click(buttons[0])
-    expect(destination.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' })
+describe('HomeHero', () => {
+  it('states what Exter Cloud does with a clear way to start', async () => {
+    vi.stubEnv('NEXT_PUBLIC_WHATSAPP_PHONE', '')
+    await render(<HomeHero />)
+    expect(container.querySelector('h1')!.textContent).toBe('Grow your business. We handle the digital.')
+    expect(container.querySelector('a[href="/cost-estimator"]')!.textContent).toContain('Start a project')
+    // Without WhatsApp configured the second button falls back to the services page.
+    expect(container.querySelector('a[href="/services"]')).not.toBeNull()
+  })
+  it('lands each piece a beat apart: headline, line, buttons, showcase', async () => {
+    await render(<HomeHero />)
+    const pieces = [...container.querySelectorAll('.reveal[data-mode="load"]')] as HTMLElement[]
+    expect(pieces.map(el => el.tagName)).toEqual(['H1', 'P', 'DIV', 'DIV'])
+    const delays = pieces.map(el => parseFloat(el.style.getPropertyValue('--reveal-delay')))
+    expect(delays).toEqual([0, 0.07, 0.14, 0.2])
+    // Only the static text gets the soft blur, never the buttons or the live showcase.
+    expect(pieces.map(el => el.hasAttribute('data-soft'))).toEqual([true, true, false, false])
   })
 })

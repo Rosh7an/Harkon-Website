@@ -3,7 +3,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 const modalMock = vi.hoisted(() => vi.fn((_props: Record<string, unknown>) => null))
 const pdfMock = vi.hoisted(() => ({ create: vi.fn(), save: vi.fn() }))
-vi.mock('../components/QueryModal', () => ({ default: modalMock }))
+vi.mock('../components/QueryModal', async importOriginal => ({ ...(await importOriginal<typeof import('../components/QueryModal')>()), default: modalMock }))
 vi.mock('../utils/estimatePdf', () => ({ createEstimatePdf: pdfMock.create }))
 import SolutionDiscovery, { proposalSummary, type DiscoveryResponse } from '../components/SolutionDiscovery'
 import { QUESTIONS, applyAgentOutput, createDiscovery, editFact, nextQuestion, recordAnswer, validateAgentOutput } from '../utils/discovery'
@@ -174,11 +174,13 @@ describe('discovery interface', () => {
   })
 
   it('names the estimator consistently on dedicated pages and the home embed', async () => {
-    expect(container.querySelector('section[aria-label="Cost Estimator"]')).not.toBeNull()
-    expect(container.querySelector('h1')?.textContent).toBe('Cost Estimator')
+    expect(container.querySelector('section[aria-label="Free cost estimator"]')).not.toBeNull()
+    expect(container.querySelector('h1')?.textContent).toBe('Free cost estimator')
+    // Visitors who came from Start a project are told this is the first step.
+    expect(container.textContent).toContain('Starting a project with us? This is step one.')
     await act(async () => { root.render(<SolutionDiscovery headingLevel="h2" />) })
     expect(container.querySelector('h1')).toBeNull()
-    expect(container.querySelector('h2')?.textContent).toBe('Cost Estimator')
+    expect(container.querySelector('h2')?.textContent).toBe('Free cost estimator')
     expect(container.textContent).not.toContain('Solution Planner')
   })
   it('keeps a failed AI answer pending until the retry succeeds', async () => {
@@ -736,6 +738,9 @@ describe('discovery interface', () => {
     expect(button('Edit solution')).toBeTruthy()
     expect([...container.querySelectorAll('button')].some(item => /Request.*call/.test(item.textContent ?? ''))).toBe(false)
     expect(modalMock).not.toHaveBeenCalled()
+    // Start a project ends here: the visitor can send this estimate to the team.
+    expect(container.querySelector('#send-estimate-title')?.textContent).toBe('Send this to us')
+    expect(button('Send my estimate')).toBeTruthy()
     await click(button('Download PDF estimate'))
     expect(pdfMock.create).toHaveBeenCalledWith(confirmed)
   })

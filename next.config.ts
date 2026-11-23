@@ -18,6 +18,14 @@ export const SECURITY_HEADERS = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // Old page addresses from the previous site design.
+  async redirects() {
+    return [
+      { source: '/why', destination: '/about', permanent: true },
+      { source: '/process', destination: '/#how-we-work', permanent: true },
+      { source: '/pricing', destination: '/cost-estimator', permanent: false },
+    ]
+  },
   async headers() {
     return [{ source: '/:path*', headers: SECURITY_HEADERS }]
   },

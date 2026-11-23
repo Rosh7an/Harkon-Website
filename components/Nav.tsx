@@ -1,192 +1,107 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
-import { useRouter, usePathname } from 'next/navigation'
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import Image from 'next/image'
+import { usePathname } from 'next/navigation'
 import ThemeToggle from '@/components/ThemeToggle'
+import { businessContactLinks } from '@/utils/businessContact'
+import styles from './Nav.module.css'
 
-const NAV_LINKS = [
-  { label: 'Home',     id: 'hero'     },
-  { label: 'About',    id: 'about'    },
-  { label: 'Services', id: 'services' },
-  { label: 'Process',  id: 'process'  },
-  { label: 'Results',  id: 'stats'    },
-  { label: 'Cost Estimator', id: '/cost-estimator' },
+export const NAV_LINKS = [
+  { label: 'Home', href: '/' },
+  { label: 'Services', href: '/services' },
+  { label: 'Work', href: '/work' },
+  { label: 'About', href: '/about' },
+  { label: 'Contact', href: '/contact' },
 ]
 
+/** True when `pathname` is `href` or a page inside it, e.g. /services/booking under /services. */
+export function isActive(pathname: string, href: string) {
+  if (href === '/') return pathname === '/'
+  return pathname === href || pathname.startsWith(href + '/')
+}
+
+const TAB_ICONS = {
+  home: <path d="M4 11 12 4l8 7v9h-5v-6H9v6H4z" />,
+  services: <><rect x="4" y="4" width="7" height="7" rx="2" /><rect x="13" y="4" width="7" height="7" rx="2" /><rect x="4" y="13" width="7" height="7" rx="2" /><rect x="13" y="13" width="7" height="7" rx="2" /></>,
+  work: <><rect x="3" y="6" width="18" height="14" rx="2" /><path d="M9 6V4h6v2" /></>,
+  about: <><circle cx="12" cy="8" r="3.5" /><path d="M5 20c1-3.6 3.8-5.5 7-5.5s6 1.9 7 5.5" /></>,
+}
+
+function TabIcon({ name }: { name: keyof typeof TAB_ICONS }) {
+  return <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{TAB_ICONS[name]}</svg>
+}
+
 export default function Nav() {
-  const router   = useRouter()
-  const pathname = usePathname()
-  const [scrolled,    setScrolled]    = useState(false)
-  const [mobileOpen,  setMobileOpen]  = useState(false)
-  const menuButton = useRef<HTMLButtonElement>(null)
-  const mobileMenu = useRef<HTMLDivElement>(null)
+  const pathname = usePathname() || '/'
+  const [scrolled, setScrolled] = useState(false)
+  // On the estimator the visitor is already starting a project, so no second button for it.
+  const onEstimator = isActive(pathname, '/cost-estimator')
+  const { whatsapp } = businessContactLinks({ whatsapp: process.env.NEXT_PUBLIC_WHATSAPP_PHONE })
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 50)
+    const onScroll = () => setScrolled(window.scrollY > 24)
     onScroll()
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
 
-  // Keep a tall menu scrollable without moving the page underneath it.
-  useEffect(() => {
-    if (!mobileOpen) return
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    mobileMenu.current?.querySelector('button')?.focus()
-    const onResize = () => { if (window.innerWidth >= 1024) setMobileOpen(false) }
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { setMobileOpen(false); menuButton.current?.focus() }
-      if (event.key !== 'Tab') return
-      const controls = [menuButton.current, ...Array.from(mobileMenu.current?.querySelectorAll<HTMLButtonElement>('button') ?? [])].filter((control): control is HTMLButtonElement => control !== null)
-      const first = controls[0]
-      const last = controls[controls.length - 1]
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus() }
-      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus() }
-    }
-    window.addEventListener('resize', onResize)
-    document.addEventListener('keydown', onKeyDown)
-    return () => {
-      document.body.style.overflow = previousOverflow
-      window.removeEventListener('resize', onResize)
-      document.removeEventListener('keydown', onKeyDown)
-    }
-  }, [mobileOpen])
-
-  const scrollTo = (id: string) => {
-    setMobileOpen(false)
-    // Route-based links: use Next.js router for instant client-side navigation (no flash)
-    if (id.startsWith('/')) {
-      router.push(id)
-      return
-    }
-    // On a non-home page, section links should navigate home first
-    if (pathname !== '/') {
-      router.push('/#' + id)
-      return
-    }
-    // On home page: smooth scroll to section
-    const el = document.getElementById(id)
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }
+  const tab = (href: string, label: string, icon: keyof typeof TAB_ICONS) => {
+    const active = href === '/' ? pathname === '/' : isActive(pathname, href)
+    return (
+      <Link href={href} className={active ? styles.tabActive : styles.tab} aria-current={active ? 'page' : undefined}>
+        <TabIcon name={icon} />{label}
+      </Link>
+    )
   }
 
   return (
     <>
-      <nav
-        id="nav"
-        className="site-nav"
-        aria-label="Main navigation"
-        style={{
-          position:         'fixed',
-          top: 0, left: 0, right: 0,
-          zIndex:           500,
-          display:          'flex',
-          alignItems:       'center',
-          justifyContent:   'space-between',
-          transition:       'all 0.4s ease',
-          background:       scrolled || mobileOpen ? 'var(--bg)' : 'transparent',
-          borderBottom:     scrolled ? '1px solid var(--border)' : 'none',
-          backdropFilter:   'none',
-          WebkitBackdropFilter: 'none',
-        }}
-      >
-        {/* Logo */}
-        <button
-          onClick={() => scrollTo('hero')}
-          aria-label="Exter Cloud — Home"
-          className="nav-logo"
-          style={{ display: 'flex', alignItems: 'center', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-        >
-          <Image src="/logo-lockup-ondark.png" alt="" width={1330} height={882} priority className="show-on-dark" style={{ height: 44, width: 'auto' }} />
-          <Image src="/logo-lockup-onlight.png" alt="" width={1330} height={882} priority className="show-on-light" style={{ height: 44, width: 'auto' }} />
-        </button>
+      <header className={`${styles.header} ${scrolled ? styles.scrolled : ''}`}>
+        <div className={styles.bar}>
+          <Link href="/" className={styles.logo} aria-label="Exter Cloud home">
+            <Image src="/logo-icon-ondark.png" alt="" width={300} height={300} priority className="show-on-dark" />
+            <Image src="/logo-icon-onlight.png" alt="" width={300} height={300} priority className="show-on-light" />
+            <span className={styles.wordmark}>Exter Cloud</span>
+          </Link>
 
-        {/* Desktop links */}
-        <ul className="nav-desktop hidden lg:flex">
-          {NAV_LINKS.map(({ label, id }) => (
-            <li key={id}>
-              <button
-                onClick={() => scrollTo(id)}
-                style={{ fontSize: 12, color: 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer', letterSpacing: '0.05em', padding: 0, fontFamily: 'var(--font)', transition: 'color 0.2s' }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = 'var(--text)' }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'var(--muted)' }}
-              >
-                {label}
-              </button>
-            </li>
-          ))}
-          <li>
-            <button
-              onClick={() => scrollTo('cta')}
-              style={{ padding: '8px 20px', border: '1px solid var(--border-hi)', borderRadius: 4, color: 'var(--accent)', fontSize: 12, background: 'none', cursor: 'pointer', fontFamily: 'var(--font)', letterSpacing: '0.05em', transition: 'background 0.2s' }}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(216,90,48,0.07)' }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'none' }}
-            >
-              Get started
-            </button>
-          </li>
-        </ul>
+          <nav aria-label="Main navigation">
+            <ul className={styles.links}>
+              {NAV_LINKS.map(link => {
+                const active = isActive(pathname, link.href)
+                return <li key={link.href}><Link href={link.href} className={active ? styles.linkActive : styles.link} aria-current={active ? 'page' : undefined}>{link.label}</Link></li>
+              })}
+            </ul>
+          </nav>
 
-        {/* Right cluster: theme toggle (always visible) + hamburger (mobile only) */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <ThemeToggle style={{ width: 44, height: 44 }} />
-
-          <button
-            ref={menuButton}
-            onClick={() => setMobileOpen(!mobileOpen)}
-            aria-label="Menu"
-            aria-expanded={mobileOpen}
-            aria-controls="mobile-navigation"
-            className="flex lg:hidden flex-col gap-1.5 items-center justify-center relative w-11 h-11"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-          >
-            {mobileOpen ? (
-              <span style={{ fontSize: 28, color: 'var(--text)', lineHeight: 1 }}>✕</span>
-            ) : (
-              <div className="flex flex-col gap-1.5">
-                {[0,1,2].map(i => (
-                  <span key={i} style={{ display: 'block', width: 22, height: 1.5, background: 'var(--text)', borderRadius: 1 }} />
-                ))}
-              </div>
+          <div className={styles.right}>
+            <ThemeToggle className={styles.iconBtn} />
+            {whatsapp && (
+              <a href={whatsapp} target="_blank" rel="noopener noreferrer" className={styles.whatsapp} aria-label="Chat on WhatsApp">
+                <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M20 11.6a8 8 0 0 1-11.9 7L4 20l1.4-4A8 8 0 1 1 20 11.6Z" /></svg>
+              </a>
             )}
-          </button>
-        </div>
-      </nav>
-
-      {/* Mobile overlay */}
-      {mobileOpen && (
-        <div
-          ref={mobileMenu}
-          id="mobile-navigation"
-          className="mobile-menu flex lg:hidden"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Mobile navigation"
-        >
-          <div className="mobile-menu-links">
-          {NAV_LINKS.map(({ label, id }) => (
-            <button
-              key={id}
-              onClick={() => scrollTo(id)}
-              style={{ fontFamily: 'var(--font)', fontSize: 28, color: 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer', letterSpacing: '-0.03em', transition: 'color 0.2s' }}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = 'var(--accent)' }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'var(--muted)' }}
-            >
-              {label}
-            </button>
-          ))}
-          <button
-            onClick={() => scrollTo('cta')}
-            style={{ marginTop: 16, padding: '14px 32px', border: '1px solid var(--accent)', borderRadius: 8, color: 'var(--accent)', fontSize: 20, background: 'rgba(216,90,48,0.05)', cursor: 'pointer', fontFamily: 'var(--font)', letterSpacing: '0.05em' }}
-          >
-            Get started
-          </button>
+            {!onEstimator && <Link href="/cost-estimator" className={styles.cta}>Start a project</Link>}
           </div>
         </div>
-      )}
+      </header>
+
+      <nav aria-label="App navigation" className={styles.tabs}>
+        {tab('/', 'Home', 'home')}
+        {tab('/services', 'Services', 'services')}
+        <Link href="/cost-estimator" className={styles.tabMain} aria-current={onEstimator ? 'page' : undefined}>
+          <span className={styles.tabMainIcon}><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg></span>
+          Start
+        </Link>
+        {tab('/work', 'Work', 'work')}
+        {tab('/about', 'About', 'about')}
+      </nav>
     </>
   )
+}
+
+/** Put at the end of a page so the phone tab bar never covers content. */
+export function TabBarSpacer() {
+  return <div className={styles.tabSpacer} aria-hidden="true" />
 }

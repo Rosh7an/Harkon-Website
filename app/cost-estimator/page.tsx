@@ -1,13 +1,17 @@
 import type { Metadata } from 'next'
-import Nav from '@/components/Nav'
+import Nav, { TabBarSpacer } from '@/components/Nav'
 import SolutionDiscovery from '@/components/SolutionDiscovery'
 import Footer from '@/components/Footer'
+import EstimatorGuide from '@/components/site/EstimatorGuide'
+import { ESTIMATOR_DESCRIPTION, ESTIMATOR_URL, estimatorJsonLd, jsonLdScript } from '@/utils/estimatorGuide'
 import { businessContactLinks } from '@/utils/businessContact'
 
 export const metadata: Metadata = {
-  title: 'Cost Estimator — Exter Cloud',
-  alternates: { canonical: 'https://www.extercloud.in/cost-estimator' },
-  description: 'Discover the right solution for your business, review connected website, CRM, portal and mobile requirements, and estimate the confirmed scope.',
+  title: 'Free Website & App Cost Estimator | Exter Cloud',
+  alternates: { canonical: ESTIMATOR_URL },
+  description: ESTIMATOR_DESCRIPTION,
+  openGraph: { title: 'Free Website & App Cost Estimator', description: ESTIMATOR_DESCRIPTION, url: ESTIMATOR_URL, siteName: 'Exter Cloud', type: 'website' },
+  twitter: { card: 'summary_large_image', title: 'Free Website & App Cost Estimator', description: ESTIMATOR_DESCRIPTION },
 }
 
 export default function CostEstimatorPage() {
@@ -15,8 +19,11 @@ export default function CostEstimatorPage() {
   return (
     <main className="page-with-nav min-h-screen pb-16 bg-[var(--bg)] text-[var(--text)]">
       <Nav />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(estimatorJsonLd()) }} />
       <SolutionDiscovery contactLinks={contactLinks} />
-      <Footer />
+      <EstimatorGuide />
+      <Footer showCta={false} />
+      <TabBarSpacer />
     </main>
   )
 }

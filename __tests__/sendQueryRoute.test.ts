@@ -31,6 +31,14 @@ describe('proposal contact boundary', () => {
     }
     expect(mocks.send).not.toHaveBeenCalled()
   })
+  it('sends an estimate with its own subject and heading', async () => {
+    mocks.send.mockResolvedValue({ error: null })
+    expect((await send({ ...valid, intent: 'estimate' })).status).toBe(200)
+    expect(mocks.send.mock.calls[0][0].subject).toBe('Estimate sent by Asha')
+    expect(mocks.send.mock.calls[0][0].html).toContain('New estimate from the Exter Cloud website')
+    expect(mocks.send.mock.calls[0][0].html).toContain(valid.message)
+    expect(mocks.send.mock.calls[0][0].html).not.toContain('Preferred time')
+  })
   it('accepts long discovery summaries, escapes content and keeps a validated reply address', async () => {
     mocks.send.mockResolvedValue({ error: null })
     const response = await send({ ...valid, message: `${'<script>unsafe</script>'}${'x'.repeat(14000)}` })
